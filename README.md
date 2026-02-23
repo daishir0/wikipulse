@@ -137,16 +137,6 @@ tests/
     +-- e2e/basic.spec.ts   # Playwright tests
 ```
 
-## WikiBot (Optional)
-
-WikiBot uses Claude CLI to generate comments. To enable it:
-
-1. Install Claude CLI: `npm install -g @anthropic-ai/claude-code`
-2. The bot calls Claude with `--print --dangerously-skip-permissions` flag
-3. Comments appear as chat bubbles from the mascot character
-
-WikiBot works without any configuration — if Claude CLI is not available, the bot bubble simply won't appear.
-
 ## Testing
 
 ```bash
@@ -305,16 +295,6 @@ src/
 tests/
     +-- e2e/basic.spec.ts   # Playwrightテスト
 ```
-
-## ウィキまる（オプション）
-
-ウィキまるはClaude CLIを使ってコメントを生成します。有効にするには:
-
-1. Claude CLIをインストール: `npm install -g @anthropic-ai/claude-code`
-2. `--print --dangerously-skip-permissions` フラグでClaudeを呼び出します
-3. マスコットキャラクターのチャットバブルとしてコメントが表示されます
-
-ウィキまるは特別な設定なしで動作します。Claude CLIが利用できない場合、ボットバブルは単に表示されません。
 
 ## テスト
 
