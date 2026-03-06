@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic';
 import { useWikipediaStream } from '@/hooks/useWikipediaStream';
 import { useSound } from '@/hooks/useSound';
 import FloatingTitles from '@/components/FloatingTitles';
-import GlobeTooltip from '@/components/GlobeTooltip';
+
 import SidePanel from '@/components/SidePanel';
 import SoundControls from '@/components/SoundControls';
 import TimelineSlider from '@/components/TimelineSlider';
@@ -99,7 +99,6 @@ export default function Home() {
     <main className="relative h-screen w-screen overflow-hidden bg-black">
       <GlobeComponent />
       <FloatingTitles />
-      <GlobeTooltip />
 
       {/* Top-left: Timeline */}
       <div className="fixed top-4 left-4 z-20">

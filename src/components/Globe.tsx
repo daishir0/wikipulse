@@ -109,8 +109,17 @@ export default function Globe() {
     return [...battleRings, ...rippleRings];
   }, [editBattles, editRipples]);
 
+  const lastClickRef = useRef<{ time: number; lat: number; lng: number }>({ time: 0, lat: 0, lng: 0 });
+
   const handleGlobeClick = useCallback(({ lat, lng }: { lat: number; lng: number }, event: MouseEvent) => {
-    setFocusBurst({ lat, lng, screenX: event.clientX, screenY: event.clientY, timestamp: Date.now() });
+    const now = Date.now();
+    const last = lastClickRef.current;
+    if (now - last.time < 400 && Math.abs(lat - last.lat) < 5 && Math.abs(lng - last.lng) < 5) {
+      setFocusBurst({ lat, lng, screenX: event.clientX, screenY: event.clientY, timestamp: now });
+      lastClickRef.current = { time: 0, lat: 0, lng: 0 };
+    } else {
+      lastClickRef.current = { time: now, lat, lng };
+    }
   }, [setFocusBurst]);
 
   const handleGlobeReady = useCallback(() => setIsReady(true), []);
