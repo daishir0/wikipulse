@@ -52,22 +52,80 @@ interface EditSummary {
   bot: boolean;
 }
 
+interface ArticleContext {
+  summary: string;
+  diffSnippet: string;
+}
+
+async function fetchArticleContext(title: string, lang: string): Promise<ArticleContext> {
+  const result: ArticleContext = { summary: '', diffSnippet: '' };
+
+  try {
+    // Fetch article summary
+    const summaryRes = await fetch(
+      `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`,
+      { signal: AbortSignal.timeout(5000) }
+    );
+    if (summaryRes.ok) {
+      const data = await summaryRes.json();
+      result.summary = (data.extract || '').slice(0, 300);
+    }
+  } catch { /* ignore */ }
+
+  try {
+    // Fetch latest diff snippet
+    const revRes = await fetch(
+      `https://${lang}.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(title)}&prop=revisions&rvprop=ids&rvlimit=1&format=json&origin=*`,
+      { signal: AbortSignal.timeout(5000) }
+    );
+    if (revRes.ok) {
+      const revData = await revRes.json();
+      const pages = revData.query?.pages;
+      if (pages) {
+        const page = Object.values(pages)[0] as { revisions?: { revid: number; parentid: number }[] };
+        const rev = page.revisions?.[0];
+        if (rev && rev.parentid) {
+          const diffRes = await fetch(
+            `https://${lang}.wikipedia.org/w/api.php?action=compare&fromrev=${rev.parentid}&torev=${rev.revid}&format=json&origin=*`,
+            { signal: AbortSignal.timeout(5000) }
+          );
+          if (diffRes.ok) {
+            const diffData = await diffRes.json();
+            const diffHtml = diffData.compare?.['*'] || '';
+            // Strip HTML tags and extract text
+            const diffText = diffHtml
+              .replace(/<ins[^>]*>(.*?)<\/ins>/g, '[追加: $1]')
+              .replace(/<del[^>]*>(.*?)<\/del>/g, '[削除: $1]')
+              .replace(/<[^>]+>/g, '')
+              .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/&quot;/g, '"')
+              .trim();
+            result.diffSnippet = diffText.slice(0, 500);
+          }
+        }
+      }
+    }
+  } catch { /* ignore */ }
+
+  return result;
+}
+
 export async function POST(req: NextRequest) {
   try {
-    const { edits } = (await req.json()) as { edits: EditSummary[] };
+    const { edits, requestedArticle } = (await req.json()) as { edits: EditSummary[]; requestedArticle?: string | null };
 
     if (!edits || edits.length === 0) {
       return NextResponse.json({ comment: '' });
     }
 
-    // Build a concise edit summary for the prompt (no byteDiff, with region)
+    // Build a concise edit summary for the prompt (with byteDiff and region)
     const humanEdits = edits.filter((e) => !e.bot).slice(0, 8);
     console.log(`[bot-comment] Calling Claude CLI with ${humanEdits.length} human edits`);
     const editLines = humanEdits
       .map((e) => {
-        const typeLabel = e.type === 'new' ? '[新規]' : '[編集]';
+        const typeLabel = e.type === 'new' ? '[新規記事作成]' : '[編集]';
         const region = LANG_REGION[e.lang] || e.lang.toUpperCase() + '語圏';
-        return `${typeLabel} ${region}(${e.lang.toUpperCase()}版)「${e.title}」`;
+        const diffLabel = e.type === 'new' ? '' : e.byteDiff >= 0 ? ` (+${e.byteDiff}バイト)` : ` (${e.byteDiff}バイト)`;
+        return `${typeLabel} ${region}(${e.lang.toUpperCase()}版)「${e.title}」${diffLabel}`;
       })
       .join('\n');
 
@@ -77,22 +135,71 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ comment: '' });
     }
 
+    // Fetch article context (summary + diff) in parallel
+    console.log(`[bot-comment] Fetching article context for ${humanEdits.length} articles...`);
+    const contexts = await Promise.all(
+      humanEdits.map((e) => fetchArticleContext(e.title, e.lang))
+    );
+
+    const contextLines = humanEdits.map((e, i) => {
+      const ctx = contexts[i];
+      const parts: string[] = [];
+      if (ctx.summary) parts.push(`記事概要: ${ctx.summary}`);
+      if (ctx.diffSnippet) parts.push(`変更内容: ${ctx.diffSnippet}`);
+      if (parts.length === 0) return '';
+      return `\n「${e.title}」の詳細:\n${parts.join('\n')}`;
+    }).filter(Boolean).join('\n');
+
+    console.log(`[bot-comment] contextLines length: ${contextLines.length} chars`);
+
     // Pick a random angle
     const angle = ANGLES[Math.floor(Math.random() * ANGLES.length)];
 
-    const prompt = `あなたはWikiPulseというWikipediaリアルタイム可視化サイトのマスコットキャラ「ウィキまる」です。
+    let prompt: string;
+
+    if (requestedArticle) {
+      // User specifically requested this article via "ウィキまるに送る"
+      prompt = `あなたはWikiPulseというWikipediaリアルタイム可視化サイトのマスコットキャラ「ウィキまる」です。
+
+ユーザーが「ウィキまるに送る」ボタンを押して、以下の記事について教えてほしいとリクエストしてきました：
+
+${editLines}
+${contextLines}
+
+上記の記事概要と変更内容を踏まえて、【${angle}】の角度から解説してください。
+
+ルール：
+- 最初の一文は、ユーザーがこの記事を送ってくれたことに触れる書き出しにすること。例：
+  「《記事名》について聞いてくれたんだね！これはね、〜〜」
+  「おっ、《記事名》が気になったんだ！いい質問だね〜。実はこれ、〜〜」
+  「《記事名》を送ってくれてありがとう！これについて話せるの嬉しいな〜。〜〜」
+- どんな編集がされたかにも軽く触れること。上記の「変更内容」や「記事概要」を参考に、具体的に何が追加・修正されたかを自然に織り込むこと。
+- 記事名は必ず《》で囲むこと（例：《東京タワー》）。《》は記事名にだけ使うこと。
+- 地域名は《》で囲まないこと。
+- この分野を全く知らない素人にもわかるように、かみくだいて説明すること。専門用語は使わず、小学生でもわかるくらい簡単な言葉で。
+- 読んだ人が「もっと知りたい！」と思えるように、意外性や驚きのある内容を入れること。
+- 3〜4文くらいで説明すること。1文だけは短すぎるのでNG。
+- 親しみやすいカジュアルな口調（「〜だよ」「〜なんだって！」「〜らしいよ」）
+- 絵文字は使わない
+- 「ウィキまる」としての一人称は使わない
+- 出力はコメント本文のみ（説明や前置き不要）`;
+    } else {
+      // Normal periodic comment
+      prompt = `あなたはWikiPulseというWikipediaリアルタイム可視化サイトのマスコットキャラ「ウィキまる」です。
 
 以下は直近にWikipediaで行われた編集の一部です：
 
 ${editLines}
+${contextLines}
 
-上記の中から1つ選んで、【${angle}】の角度から「問いかけ→答え」の形式でコメントしてください。
+上記の中から1つ選んで、記事概要や変更内容を踏まえた上で、【${angle}】の角度から「問いかけ→答え」の形式でコメントしてください。
 
 ルール：
 - まず読者に問いかけてから、自分で答える形式にすること。例：
   「○○（地域）で《記事名》が編集されてるけど、なんでこれが今注目されてると思う？実はね、〜〜なんだよ」
   「○○（地域）のWikipediaで《記事名》が更新されたんだけど、そもそもこれって何か知ってる？これはね、〜〜なんだって！」
   「いま○○（地域）から《記事名》の編集が来てるんだけど、これの何がすごいか分かる？実は〜〜らしいよ」
+- どんな編集がされたかにも軽く触れること。上記の「変更内容」や「記事概要」を参考に、具体的に何が追加・修正されたかを自然に織り込むこと。
 - 記事名は必ず《》で囲むこと（例：《東京タワー》）。《》は記事名にだけ使うこと。
 - 地域名は《》で囲まないこと。
 - この分野を全く知らない素人にもわかるように、かみくだいて説明すること。専門用語は使わず、小学生でもわかるくらい簡単な言葉で。
@@ -102,6 +209,7 @@ ${editLines}
 - 絵文字は使わない
 - 「ウィキまる」としての一人称は使わない
 - 出力はコメント本文のみ（説明や前置き不要）`;
+    }
 
     console.log(`[bot-comment] prompt length: ${prompt.length} chars`);
 

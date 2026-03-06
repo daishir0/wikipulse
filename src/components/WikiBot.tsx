@@ -71,11 +71,14 @@ function SearchLink({ keyword }: { keyword: string }) {
 
 export default function WikiBot() {
   const botEnabled = useStore((s) => s.botEnabled);
+  const wikiBotRequest = useStore((s) => s.wikiBotRequest);
+  const setWikiBotRequest = useStore((s) => s.setWikiBotRequest);
   const [history, setHistory] = useState<string[]>([]); // Past comments (oldest first)
   const [currentComment, setCurrentComment] = useState('');
   const [commentVersion, setCommentVersion] = useState(0);
   const [displayedText, setDisplayedText] = useState('');
   const [isThinking, setIsThinking] = useState(false);
+  const [thinkingArticle, setThinkingArticle] = useState<string | null>(null);
   const [typingDone, setTypingDone] = useState(false);
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -83,50 +86,68 @@ export default function WikiBot() {
   const fetchingRef = useRef(false);
   const currentCommentRef = useRef('');
 
-  const fetchComment = useCallback(async () => {
+  const fetchComment = useCallback(async (targetArticle?: { title: string; wiki: string }) => {
     if (fetchingRef.current) {
       console.log('[WikiBot] fetchComment skipped: already fetching');
       return;
     }
     fetchingRef.current = true;
 
-    const now = Date.now();
-    const timelineHistory = useStore.getState().timelineHistory;
-    const recentEdits = timelineHistory
-      .filter((e) => now - e.timestamp < 120000)
-      .map((e) => ({
-        title: e.title,
-        lang: extractLanguage(e.wiki),
-        byteDiff: e.byteDiff,
-        type: e.type,
-        bot: e.bot,
-      }));
+    let editsPayload;
 
-    console.log(`[WikiBot] fetchComment: ${recentEdits.length} recent edits (${recentEdits.filter(e => !e.bot).length} human)`);
+    if (targetArticle) {
+      // Specific article request from "ウィキまるに送る"
+      editsPayload = [{
+        title: targetArticle.title,
+        lang: extractLanguage(targetArticle.wiki),
+        byteDiff: 0,
+        type: 'edit' as const,
+        bot: false,
+      }];
+      console.log(`[WikiBot] fetchComment for specific article: ${targetArticle.title}`);
+    } else {
+      const now = Date.now();
+      const timelineHistory = useStore.getState().timelineHistory;
+      editsPayload = timelineHistory
+        .filter((e) => now - e.timestamp < 120000 && !e.bot)
+        .sort((a, b) => Math.abs(b.byteDiff) - Math.abs(a.byteDiff))
+        .slice(0, 5)
+        .map((e) => ({
+          title: e.title,
+          lang: extractLanguage(e.wiki),
+          byteDiff: e.byteDiff,
+          type: e.type,
+          bot: e.bot,
+        }));
+      console.log(`[WikiBot] fetchComment: ${editsPayload.length} human edits (sorted by byteDiff)`);
+    }
 
-    if (recentEdits.length === 0) {
+    if (editsPayload.length === 0) {
       fetchingRef.current = false;
       return;
     }
 
+    // Push current comment to history before showing thinking dots
+    const prev = currentCommentRef.current;
+    if (prev) {
+      setHistory((h) => [...h, prev].slice(-MAX_HISTORY));
+      currentCommentRef.current = '';
+      setCurrentComment('');
+    }
+    setThinkingArticle(targetArticle?.title || null);
     setIsThinking(true);
 
     try {
       const res = await fetch('/api/bot-comment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ edits: recentEdits }),
+        body: JSON.stringify({ edits: editsPayload, requestedArticle: targetArticle?.title || null }),
       });
       const data = await res.json();
 
       console.log(`[WikiBot] API response: comment=${data.comment ? data.comment.slice(0, 50) + '...' : '(empty)'}, status=${res.status}`);
 
       if (data.comment) {
-        const prev = currentCommentRef.current;
-        console.log(`[WikiBot] New comment received. prev=${prev ? prev.slice(0, 30) + '...' : '(none)'}`);
-        if (prev) {
-          setHistory((h) => [...h, prev].slice(-MAX_HISTORY));
-        }
         currentCommentRef.current = data.comment;
         setCurrentComment(data.comment);
         setCommentVersion((v) => v + 1); // Force typing restart even if text is same
@@ -189,6 +210,13 @@ export default function WikiBot() {
       if (typingRef.current) clearTimeout(typingRef.current);
     };
   }, [currentComment, commentVersion]);
+
+  // Handle "ウィキまるに送る" requests
+  useEffect(() => {
+    if (!wikiBotRequest || !botEnabled) return;
+    fetchComment(wikiBotRequest);
+    setWikiBotRequest(null);
+  }, [wikiBotRequest, botEnabled, fetchComment, setWikiBotRequest]);
 
   // Periodic fetch
   useEffect(() => {
@@ -271,10 +299,18 @@ export default function WikiBot() {
               <div className="absolute -left-2 bottom-3 w-0 h-0 border-t-8 border-t-transparent border-r-8 border-r-gray-800/90 border-b-8 border-b-transparent" />
               <div className="bg-gray-800/90 backdrop-blur-sm rounded-xl px-4 py-3 border border-gray-600/50 shadow-xl">
                 {isThinking ? (
-                  <div className="flex items-center gap-1.5 py-1">
-                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                  <div className="py-1">
+                    {thinkingArticle && (
+                      <p className="text-white text-sm mb-2">
+                        <span className="font-bold text-cyan-300">{thinkingArticle}</span>
+                        <span> について調べてるよ...</span>
+                      </p>
+                    )}
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </div>
                   </div>
                 ) : currentComment ? (
                   <>

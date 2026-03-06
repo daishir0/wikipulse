@@ -148,6 +148,10 @@ interface GlobalState {
   // WikiBot
   botEnabled: boolean;
   setBotEnabled: (value: boolean) => void;
+
+  // WikiBot article request (from ArticlePreview "ウィキまるに送る")
+  wikiBotRequest: { title: string; wiki: string } | null;
+  setWikiBotRequest: (req: { title: string; wiki: string } | null) => void;
 }
 
 export const useStore = create<GlobalState>()(
@@ -200,6 +204,8 @@ export const useStore = create<GlobalState>()(
     globeBrightness: 2.0,
     botEnabled: true,
     setGlobeBrightness: (value) => set((d) => { d.globeBrightness = value; }),
+    wikiBotRequest: null,
+    setWikiBotRequest: (req) => set((d) => { d.wikiBotRequest = req as typeof d.wikiBotRequest; }),
     setFocusBurst: (burst) => set((d) => { d.focusBurst = burst; }),
     setPreviewArticle: (article) => set((d) => { d.previewArticle = article; }),
     setBotEnabled: (value) => set((d) => { d.botEnabled = value; }),
