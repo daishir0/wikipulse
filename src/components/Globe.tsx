@@ -39,7 +39,6 @@ export default function Globe() {
   const autoRotate = useStore((s) => s.autoRotate);
   const editBattles = useStore((s) => s.editBattles);
   const editRipples = useStore((s) => s.editRipples);
-  const setSelectedEvent = useStore((s) => s.setSelectedEvent);
   const setGlobeCamera = useStore((s) => s.setGlobeCamera);
   const setFocusBurst = useStore((s) => s.setFocusBurst);
   const dayNightEnabled = useStore((s) => s.dayNightEnabled);
@@ -50,12 +49,6 @@ export default function Globe() {
     const interval = setInterval(() => setNow(Date.now()), 500);
     return () => clearInterval(interval);
   }, []);
-
-  const eventMap = useMemo(() => {
-    const map = new Map<string, (typeof editEvents)[0]>();
-    editEvents.forEach((e) => map.set(e.id, e));
-    return map;
-  }, [editEvents]);
 
   const pointsData = useMemo(() => {
     return editEvents
@@ -72,18 +65,15 @@ export default function Globe() {
         const isNew = cat === 'new';
         const isMajor = (event.lengthNew - event.lengthOld) >= 500;
         const botMult = event.bot ? 0.6 : 1;
+        const finalOpacity = opacity * botMult;
 
         return {
-          id: event.id,
           lat: event.position.lat,
           lng: event.position.lng,
           altitude: 0.01,
           color: event.color,
-          radius: event.size * 0.8 * botMult * (isNew ? 1.3 : isMajor ? 1.15 : 1),
-          opacity: opacity * botMult,
-          isNew,
-          isMajor,
-          title: event.title,
+          radius: finalOpacity > 0 ? event.size * 0.8 * botMult * (isNew ? 1.3 : isMajor ? 1.15 : 1) : 0,
+          opacity: finalOpacity,
         };
       })
       .filter((p) => p.opacity > 0);
@@ -100,7 +90,6 @@ export default function Globe() {
       color: () => 'rgba(255, 100, 50, 0.6)',
     }));
 
-    // Convert hex color to rgba
     const hexToRgba = (hex: string, alpha: number) => {
       const r = parseInt(hex.slice(1, 3), 16);
       const g = parseInt(hex.slice(3, 5), 16);
@@ -119,25 +108,6 @@ export default function Globe() {
 
     return [...battleRings, ...rippleRings];
   }, [editBattles, editRipples]);
-
-  const labelsData = useMemo(() => {
-    return pointsData
-      .filter((p) => p.isNew || p.isMajor)
-      .map((p) => ({
-        id: `label-${p.id}`,
-        lat: p.lat,
-        lng: p.lng,
-        text: p.isNew ? '✨ NEW' : '📈',
-        color: p.color,
-        size: p.isNew ? 1.5 : 1.2,
-        altitude: 0.02,
-      }));
-  }, [pointsData]);
-
-  const handlePointClick = useCallback((point: { id: string }) => {
-    const event = eventMap.get(point.id);
-    if (event) setSelectedEvent(event);
-  }, [eventMap, setSelectedEvent]);
 
   const handleGlobeClick = useCallback(({ lat, lng }: { lat: number; lng: number }, event: MouseEvent) => {
     setFocusBurst({ lat, lng, screenX: event.clientX, screenY: event.clientY, timestamp: Date.now() });
@@ -189,7 +159,7 @@ export default function Globe() {
   // Capture default lights on globe ready
   useEffect(() => {
     if (!isReady || !globeRef.current) return;
-    if (defaultLightsRef.current.length > 0) return; // already captured
+    if (defaultLightsRef.current.length > 0) return;
     const scene = globeRef.current.scene();
     scene.children.forEach((c: THREE.Object3D) => {
       if (c instanceof THREE.AmbientLight) {
@@ -206,19 +176,15 @@ export default function Globe() {
     if (!isReady || !globeRef.current) return;
     const scene = globeRef.current.scene();
 
-    // Remove any sun light we previously added (tagged with name)
     const ourSun = scene.children.filter((c: THREE.Object3D) => c.name === 'wp-sun-light');
     ourSun.forEach((l: THREE.Object3D) => scene.remove(l));
 
     if (dayNightEnabled) {
-      // Dim existing ambient lights for night-side contrast
       scene.children.forEach((c: THREE.Object3D) => {
         if (c instanceof THREE.AmbientLight) c.intensity = 0.2;
         if (c instanceof THREE.DirectionalLight && c.name !== 'wp-sun-light') c.intensity = 0.1;
       });
 
-      // Add sun directional light at correct position
-      // Must match latLngToVector3 coordinate system exactly
       const sunLight = new THREE.DirectionalLight(0xffeedd, 2.0);
       sunLight.name = 'wp-sun-light';
 
@@ -232,7 +198,6 @@ export default function Globe() {
       );
       scene.add(sunLight);
     } else {
-      // Restore default lighting
       scene.children.forEach((c: THREE.Object3D) => {
         if (c instanceof THREE.AmbientLight) c.intensity = 0.8;
         if (c instanceof THREE.DirectionalLight && c.name !== 'wp-sun-light') c.intensity = 0.6;
@@ -254,22 +219,12 @@ export default function Globe() {
         pointLng="lng"
         pointAltitude="altitude"
         pointColor={(d) => {
-          const p = d as { color: string; opacity: number };
-          const op = Math.floor(p.opacity * 255).toString(16).padStart(2, '0');
-          return `${p.color}${op}`;
+          if (!d) return '#ffffff';
+          const p = d as { color: string };
+          return p.color ?? '#ffffff';
         }}
         pointRadius="radius"
-        pointsMerge={false}
-        onPointClick={(p) => handlePointClick(p as { id: string })}
-        labelsData={labelsData}
-        labelLat="lat"
-        labelLng="lng"
-        labelText="text"
-        labelSize="size"
-        labelDotRadius={0}
-        labelColor={(d) => (d as { color: string }).color}
-        labelAltitude="altitude"
-        labelResolution={2}
+        pointsMerge={true}
         ringsData={ringsData}
         ringLat="lat"
         ringLng="lng"
@@ -278,7 +233,6 @@ export default function Globe() {
         ringRepeatPeriod="repeatPeriod"
         ringColor="color"
         pointsTransitionDuration={0}
-        labelsTransitionDuration={0}
         atmosphereColor="lightskyblue"
         atmosphereAltitude={0.15}
         animateIn={false}
