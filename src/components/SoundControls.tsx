@@ -10,6 +10,9 @@ const PRESET_OPTIONS: { value: SoundPreset; label: string }[] = [
   { value: 'piano', label: 'Piano' },
   { value: 'ambient', label: 'Ambient' },
   { value: 'minimal', label: 'Minimal' },
+  { value: 'raindrop', label: 'Rain' },
+  { value: 'kalimba', label: 'Kalimba' },
+  { value: 'ocean', label: 'Ocean' },
   { value: 'rand', label: 'Rand' },
 ];
 

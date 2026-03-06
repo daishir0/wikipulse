@@ -61,7 +61,7 @@ const ANIMATION_DURATION = 12000;
 const BURST_ANIMATION_DURATION = 20000;
 const MAX_TITLES = 20;
 const MAX_CONCURRENT_TRANSLATIONS = 1;
-const TRANSLATION_INTERVAL_MS = 1000;
+const TRANSLATION_INTERVAL_MS = 10000;
 const MAX_CACHE_SIZE = 500;
 
 const jaTranslationCache = new Map<string, string | null>();

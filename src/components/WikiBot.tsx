@@ -8,6 +8,11 @@ const BOT_INTERVAL = 120000; // 2 minutes
 const TYPING_SPEED = 35; // ms per character
 const MAX_HISTORY = 3; // Keep 3 past comments visible
 
+interface HistoryEntry {
+  text: string;
+  thumbnailUrl: string | null;
+}
+
 // Parse 《title》 markers into segments for colored rendering
 function parseComment(text: string): { type: 'text' | 'title'; value: string }[] {
   const segments: { type: 'text' | 'title'; value: string }[] = [];
@@ -54,9 +59,12 @@ function CommentText({ text }: { text: string }) {
   );
 }
 
-// Google search link for a keyword
+// Wikipedia link for a keyword
 function SearchLink({ keyword }: { keyword: string }) {
-  const url = `https://www.google.com/search?q=${encodeURIComponent(keyword)}`;
+  const timeline = useStore.getState().timelineHistory;
+  const matchingEdit = timeline.find((e) => e.title === keyword);
+  const lang = matchingEdit ? extractLanguage(matchingEdit.wiki) : 'en';
+  const url = `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(keyword)}`;
   return (
     <a
       href={url}
@@ -71,9 +79,8 @@ function SearchLink({ keyword }: { keyword: string }) {
 
 export default function WikiBot() {
   const botEnabled = useStore((s) => s.botEnabled);
-  const wikiBotRequest = useStore((s) => s.wikiBotRequest);
-  const setWikiBotRequest = useStore((s) => s.setWikiBotRequest);
-  const [history, setHistory] = useState<string[]>([]); // Past comments (oldest first)
+  const wikiBotQueue = useStore((s) => s.wikiBotQueue);
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [currentComment, setCurrentComment] = useState('');
   const [commentVersion, setCommentVersion] = useState(0);
   const [displayedText, setDisplayedText] = useState('');
@@ -85,6 +92,7 @@ export default function WikiBot() {
   const typingRef = useRef<NodeJS.Timeout | null>(null);
   const fetchingRef = useRef(false);
   const currentCommentRef = useRef('');
+  const currentThumbnailRef = useRef<string | null>(null);
 
   const fetchComment = useCallback(async (targetArticle?: { title: string; wiki: string }) => {
     if (fetchingRef.current) {
@@ -96,7 +104,6 @@ export default function WikiBot() {
     let editsPayload;
 
     if (targetArticle) {
-      // Specific article request from "ウィキまるに送る"
       editsPayload = [{
         title: targetArticle.title,
         lang: extractLanguage(targetArticle.wiki),
@@ -130,8 +137,10 @@ export default function WikiBot() {
     // Push current comment to history before showing thinking dots
     const prev = currentCommentRef.current;
     if (prev) {
-      setHistory((h) => [...h, prev].slice(-MAX_HISTORY));
+      const prevThumb = currentThumbnailRef.current;
+      setHistory((h) => [...h, { text: prev, thumbnailUrl: prevThumb }].slice(-MAX_HISTORY));
       currentCommentRef.current = '';
+      currentThumbnailRef.current = null;
       setCurrentComment('');
     }
     setThinkingArticle(targetArticle?.title || null);
@@ -150,14 +159,14 @@ export default function WikiBot() {
       if (data.comment) {
         currentCommentRef.current = data.comment;
         setCurrentComment(data.comment);
-        setCommentVersion((v) => v + 1); // Force typing restart even if text is same
+        setCommentVersion((v) => v + 1);
         setIsThinking(false);
         setThumbnailUrl(null);
+        currentThumbnailRef.current = null;
 
         // Fetch thumbnail for the article mentioned in the comment
         const articleTitle = extractFirstTitle(data.comment);
         if (articleTitle) {
-          // Find language from recent edits
           const timeline = useStore.getState().timelineHistory;
           const matchingEdit = timeline.find((e) => e.title === articleTitle);
           const lang = matchingEdit ? extractLanguage(matchingEdit.wiki) : 'en';
@@ -166,6 +175,7 @@ export default function WikiBot() {
             .then((summary) => {
               if (summary.thumbnail?.source) {
                 setThumbnailUrl(summary.thumbnail.source);
+                currentThumbnailRef.current = summary.thumbnail.source;
               }
             })
             .catch(() => { /* ignore thumbnail fetch errors */ });
@@ -211,12 +221,14 @@ export default function WikiBot() {
     };
   }, [currentComment, commentVersion]);
 
-  // Handle "ウィキまるに送る" requests
+  // Process queue: when not fetching and queue has items, process next
   useEffect(() => {
-    if (!wikiBotRequest || !botEnabled) return;
-    fetchComment(wikiBotRequest);
-    setWikiBotRequest(null);
-  }, [wikiBotRequest, botEnabled, fetchComment, setWikiBotRequest]);
+    if (!botEnabled || fetchingRef.current || wikiBotQueue.length === 0) return;
+    const next = useStore.getState().shiftWikiBotQueue();
+    if (next) {
+      fetchComment(next);
+    }
+  }, [wikiBotQueue, botEnabled, fetchComment]);
 
   // Periodic fetch
   useEffect(() => {
@@ -229,6 +241,7 @@ export default function WikiBot() {
       setTypingDone(false);
       setThumbnailUrl(null);
       currentCommentRef.current = '';
+      currentThumbnailRef.current = null;
       return;
     }
 
@@ -245,6 +258,20 @@ export default function WikiBot() {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, [botEnabled, fetchComment]);
+
+  // After fetching completes (isThinking goes false), check queue for next item
+  useEffect(() => {
+    if (isThinking || fetchingRef.current) return;
+    const queue = useStore.getState().wikiBotQueue;
+    if (queue.length > 0) {
+      const next = useStore.getState().shiftWikiBotQueue();
+      if (next) {
+        // Small delay so the current comment is visible briefly before next starts
+        const timer = setTimeout(() => fetchComment(next), 2000);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [isThinking, fetchComment]);
 
   if (!botEnabled) return null;
 
@@ -276,19 +303,25 @@ export default function WikiBot() {
         <div className="flex flex-col gap-2 max-w-sm">
           <div className="relative">
             {/* Past comments (older = more faded) */}
-            {history.map((msg, idx) => {
+            {history.map((entry, idx) => {
               const age = history.length - idx;
               const opacity = age === 1 ? 0.55 : age === 2 ? 0.35 : 0.2;
-              const title = extractFirstTitle(msg);
+              const title = extractFirstTitle(entry.text);
               return (
                 <div
-                  key={`h-${idx}-${msg.slice(0, 20)}`}
+                  key={`h-${idx}-${entry.text.slice(0, 20)}`}
                   className="mb-2 bg-gray-800/90 backdrop-blur-sm rounded-xl px-4 py-2.5 border border-gray-600/30 shadow-lg transition-opacity duration-500"
                   style={{ opacity }}
                 >
                   <p className="text-white text-xs leading-relaxed">
-                    <CommentText text={msg} />
+                    <CommentText text={entry.text} />
                   </p>
+                  {entry.thumbnailUrl && (
+                    <div className="mt-1.5 rounded-lg overflow-hidden">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={entry.thumbnailUrl} alt="" className="w-full h-16 object-cover rounded-lg" />
+                    </div>
+                  )}
                   {title && <SearchLink keyword={title} />}
                 </div>
               );

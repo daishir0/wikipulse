@@ -149,9 +149,10 @@ interface GlobalState {
   botEnabled: boolean;
   setBotEnabled: (value: boolean) => void;
 
-  // WikiBot article request (from ArticlePreview "ウィキまるに送る")
-  wikiBotRequest: { title: string; wiki: string } | null;
-  setWikiBotRequest: (req: { title: string; wiki: string } | null) => void;
+  // WikiBot article request queue (from ArticlePreview "ウィキまるに送る")
+  wikiBotQueue: { title: string; wiki: string }[];
+  pushWikiBotQueue: (req: { title: string; wiki: string }) => void;
+  shiftWikiBotQueue: () => { title: string; wiki: string } | undefined;
 }
 
 export const useStore = create<GlobalState>()(
@@ -204,8 +205,15 @@ export const useStore = create<GlobalState>()(
     globeBrightness: 2.0,
     botEnabled: true,
     setGlobeBrightness: (value) => set((d) => { d.globeBrightness = value; }),
-    wikiBotRequest: null,
-    setWikiBotRequest: (req) => set((d) => { d.wikiBotRequest = req as typeof d.wikiBotRequest; }),
+    wikiBotQueue: [],
+    pushWikiBotQueue: (req) => set((d) => { d.wikiBotQueue.push(req); }),
+    shiftWikiBotQueue: () => {
+      const state = get();
+      if (state.wikiBotQueue.length === 0) return undefined;
+      const first = state.wikiBotQueue[0];
+      set((d) => { d.wikiBotQueue.splice(0, 1); });
+      return first;
+    },
     setFocusBurst: (burst) => set((d) => { d.focusBurst = burst; }),
     setPreviewArticle: (article) => set((d) => { d.previewArticle = article; }),
     setBotEnabled: (value) => set((d) => { d.botEnabled = value; }),

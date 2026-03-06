@@ -150,6 +150,15 @@ export function playEditSound(
     case 'minimal':
       playPresetMinimal(ctx, lang, byteDiff, isNew, volume, now);
       break;
+    case 'raindrop':
+      playPresetRaindrop(ctx, lang, byteDiff, isNew, volume, now);
+      break;
+    case 'kalimba':
+      playPresetKalimba(ctx, lang, byteDiff, isNew, volume, now);
+      break;
+    case 'ocean':
+      playPresetOcean(ctx, lang, byteDiff, isNew, volume, now);
+      break;
   }
 }
 
@@ -385,6 +394,307 @@ function playPresetMinimal(
     g2.connect(masterGain);
     osc2.start(now + 0.05);
     osc2.stop(now + duration * 0.6);
+  }
+}
+
+// ============================================================
+// Preset: Raindrop - water drop pluck with pitched resonance
+// ============================================================
+function playPresetRaindrop(
+  ctx: AudioContext, lang: string, byteDiff: number, isNew: boolean,
+  volume: number, now: number
+) {
+  if (!reverbNode || !masterGain) return;
+
+  const rootFreq = CHORD_ROOT_MAP[lang] || CHORD_ROOT_MAP.default;
+  const absDiff = Math.abs(byteDiff);
+
+  // Higher pitch = smaller edit (like small raindrops)
+  let freq = rootFreq;
+  if (absDiff > 1000) freq *= 0.5;
+  else if (absDiff > 500) freq *= 0.75;
+  else if (absDiff < 50) freq *= 2.5;
+  else if (absDiff < 200) freq *= 1.5;
+
+  // Add pentatonic variation
+  const pentatonic = PENTATONIC_RATIOS[Math.floor(Math.random() * PENTATONIC_RATIOS.length)];
+  freq *= pentatonic;
+
+  const gain = volume * (isNew ? 0.07 : 0.05);
+  const duration = isNew ? 1.8 : 0.8 + Math.random() * 0.4;
+
+  const wetGain = ctx.createGain();
+  wetGain.gain.value = 0.8;
+  wetGain.connect(reverbNode);
+
+  const dryGain = ctx.createGain();
+  dryGain.gain.value = 0.2;
+  dryGain.connect(masterGain);
+
+  // Main "plop" — sharp attack sine that quickly decays
+  const osc = ctx.createOscillator();
+  const g = ctx.createGain();
+  osc.type = 'sine';
+  // Pitch drops slightly on attack (water drop effect)
+  osc.frequency.setValueAtTime(freq * 1.5, now);
+  osc.frequency.exponentialRampToValueAtTime(freq, now + 0.03);
+  g.gain.setValueAtTime(0, now);
+  g.gain.linearRampToValueAtTime(gain, now + 0.002);
+  g.gain.exponentialRampToValueAtTime(gain * 0.2, now + 0.06);
+  g.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+  osc.connect(g);
+  g.connect(dryGain);
+  g.connect(wetGain);
+  osc.start(now);
+  osc.stop(now + duration);
+
+  // Resonance ring (octave above, quieter, longer tail)
+  const osc2 = ctx.createOscillator();
+  const g2 = ctx.createGain();
+  osc2.type = 'sine';
+  osc2.frequency.setValueAtTime(freq * 2, now);
+  g2.gain.setValueAtTime(0, now);
+  g2.gain.linearRampToValueAtTime(gain * 0.15, now + 0.005);
+  g2.gain.exponentialRampToValueAtTime(0.001, now + duration * 0.7);
+
+  osc2.connect(g2);
+  g2.connect(wetGain);
+  osc2.start(now);
+  osc2.stop(now + duration * 0.7);
+
+  // New articles get a second drop (echo)
+  if (isNew) {
+    const delay = 0.15;
+    const osc3 = ctx.createOscillator();
+    const g3 = ctx.createGain();
+    osc3.type = 'sine';
+    osc3.frequency.setValueAtTime(freq * 1.5 * (3/2), now + delay);
+    osc3.frequency.exponentialRampToValueAtTime(freq * (3/2), now + delay + 0.03);
+    g3.gain.setValueAtTime(0, now + delay);
+    g3.gain.linearRampToValueAtTime(gain * 0.6, now + delay + 0.002);
+    g3.gain.exponentialRampToValueAtTime(0.001, now + delay + duration * 0.8);
+
+    osc3.connect(g3);
+    g3.connect(dryGain);
+    g3.connect(wetGain);
+    osc3.start(now + delay);
+    osc3.stop(now + delay + duration * 0.8);
+  }
+}
+
+// ============================================================
+// Preset: Kalimba - metallic thumb piano with bright overtones
+// ============================================================
+function playPresetKalimba(
+  ctx: AudioContext, lang: string, byteDiff: number, isNew: boolean,
+  volume: number, now: number
+) {
+  if (!reverbNode || !masterGain) return;
+
+  const rootFreq = CHORD_ROOT_MAP[lang] || CHORD_ROOT_MAP.default;
+  const absDiff = Math.abs(byteDiff);
+
+  // Kalimba plays in a higher register
+  let freq = rootFreq * 2;
+  if (absDiff > 1000) freq *= 0.5;
+  else if (absDiff < 50) freq *= 1.5;
+
+  const pentatonic = PENTATONIC_RATIOS[Math.floor(Math.random() * PENTATONIC_RATIOS.length)];
+  freq *= pentatonic;
+
+  const gain = volume * (isNew ? 0.06 : 0.045);
+  const duration = isNew ? 2.5 : 1.5 + Math.random() * 0.5;
+
+  const wetGain = ctx.createGain();
+  wetGain.gain.value = 0.6;
+  wetGain.connect(reverbNode);
+
+  const dryGain = ctx.createGain();
+  dryGain.gain.value = 0.4;
+  dryGain.connect(masterGain);
+
+  // Fundamental — sharp percussive attack
+  const osc1 = ctx.createOscillator();
+  const g1 = ctx.createGain();
+  osc1.type = 'sine';
+  osc1.frequency.setValueAtTime(freq, now);
+  g1.gain.setValueAtTime(0, now);
+  g1.gain.linearRampToValueAtTime(gain, now + 0.001);
+  g1.gain.exponentialRampToValueAtTime(gain * 0.5, now + 0.02);
+  g1.gain.exponentialRampToValueAtTime(gain * 0.15, now + 0.3);
+  g1.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+  osc1.connect(g1);
+  g1.connect(dryGain);
+  g1.connect(wetGain);
+  osc1.start(now);
+  osc1.stop(now + duration);
+
+  // Strong 3rd harmonic (characteristic kalimba metallic buzz)
+  const osc3 = ctx.createOscillator();
+  const g3 = ctx.createGain();
+  osc3.type = 'sine';
+  osc3.frequency.setValueAtTime(freq * 3, now);
+  g3.gain.setValueAtTime(0, now);
+  g3.gain.linearRampToValueAtTime(gain * 0.25, now + 0.001);
+  g3.gain.exponentialRampToValueAtTime(gain * 0.05, now + 0.05);
+  g3.gain.exponentialRampToValueAtTime(0.001, now + duration * 0.3);
+
+  osc3.connect(g3);
+  g3.connect(wetGain);
+  osc3.start(now);
+  osc3.stop(now + duration * 0.3);
+
+  // 5th harmonic (bright shimmer)
+  const osc5 = ctx.createOscillator();
+  const g5 = ctx.createGain();
+  osc5.type = 'sine';
+  osc5.frequency.setValueAtTime(freq * 5, now);
+  g5.gain.setValueAtTime(0, now);
+  g5.gain.linearRampToValueAtTime(gain * 0.08, now + 0.001);
+  g5.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+
+  osc5.connect(g5);
+  g5.connect(wetGain);
+  osc5.start(now);
+  osc5.stop(now + 0.15);
+
+  // Slight detune for metallic warmth
+  const oscD = ctx.createOscillator();
+  const gD = ctx.createGain();
+  oscD.type = 'sine';
+  oscD.frequency.setValueAtTime(freq * 1.005, now);
+  gD.gain.setValueAtTime(0, now);
+  gD.gain.linearRampToValueAtTime(gain * 0.2, now + 0.001);
+  gD.gain.exponentialRampToValueAtTime(0.001, now + duration * 0.5);
+
+  oscD.connect(gD);
+  gD.connect(wetGain);
+  oscD.start(now);
+  oscD.stop(now + duration * 0.5);
+
+  // New articles: add a second kalimba note (perfect 5th above)
+  if (isNew) {
+    const delay = 0.08;
+    const osc2 = ctx.createOscillator();
+    const g2 = ctx.createGain();
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(freq * 3/2, now + delay);
+    g2.gain.setValueAtTime(0, now + delay);
+    g2.gain.linearRampToValueAtTime(gain * 0.7, now + delay + 0.001);
+    g2.gain.exponentialRampToValueAtTime(gain * 0.1, now + delay + 0.3);
+    g2.gain.exponentialRampToValueAtTime(0.001, now + delay + duration * 0.8);
+
+    osc2.connect(g2);
+    g2.connect(dryGain);
+    g2.connect(wetGain);
+    osc2.start(now + delay);
+    osc2.stop(now + delay + duration * 0.8);
+  }
+}
+
+// ============================================================
+// Preset: Ocean - soft wave-like swells with filtered noise
+// ============================================================
+function playPresetOcean(
+  ctx: AudioContext, lang: string, byteDiff: number, isNew: boolean,
+  volume: number, now: number
+) {
+  if (!reverbNode || !masterGain) return;
+
+  const rootFreq = CHORD_ROOT_MAP[lang] || CHORD_ROOT_MAP.default;
+  const absDiff = Math.abs(byteDiff);
+
+  // Lower frequency range for ocean depth
+  let freq = rootFreq * 0.5;
+  if (absDiff > 1000) freq *= 0.75;
+  else if (absDiff < 50) freq *= 1.5;
+
+  const gain = volume * (isNew ? 0.05 : 0.035);
+  const duration = isNew ? 5.0 : 3.0 + Math.random() * 1.5;
+
+  const wetGain = ctx.createGain();
+  wetGain.gain.value = 0.85;
+  wetGain.connect(reverbNode);
+
+  const dryGain = ctx.createGain();
+  dryGain.gain.value = 0.15;
+  dryGain.connect(masterGain);
+
+  // Filtered noise "wave" — white noise through bandpass filter
+  const bufferSize = ctx.sampleRate * Math.min(duration, 5);
+  const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+  const noiseData = noiseBuffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) {
+    noiseData[i] = Math.random() * 2 - 1;
+  }
+
+  const noise = ctx.createBufferSource();
+  noise.buffer = noiseBuffer;
+
+  const bandpass = ctx.createBiquadFilter();
+  bandpass.type = 'bandpass';
+  bandpass.frequency.setValueAtTime(freq * 2, now);
+  bandpass.Q.value = 0.5;
+
+  const noiseGain = ctx.createGain();
+  noiseGain.gain.setValueAtTime(0, now);
+  // Swell in, swell out (wave shape)
+  noiseGain.gain.linearRampToValueAtTime(gain * 0.3, now + duration * 0.3);
+  noiseGain.gain.linearRampToValueAtTime(gain * 0.15, now + duration * 0.6);
+  noiseGain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+  noise.connect(bandpass);
+  bandpass.connect(noiseGain);
+  noiseGain.connect(wetGain);
+  noise.start(now);
+  noise.stop(now + duration);
+
+  // Tonal undertone — deep sine with slow swell
+  const osc = ctx.createOscillator();
+  const g = ctx.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(freq, now);
+  g.gain.setValueAtTime(0, now);
+  g.gain.linearRampToValueAtTime(gain, now + duration * 0.25);
+  g.gain.setValueAtTime(gain, now + duration * 0.4);
+  g.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+  osc.connect(g);
+  g.connect(dryGain);
+  g.connect(wetGain);
+  osc.start(now);
+  osc.stop(now + duration);
+
+  // Perfect 5th harmonic for depth
+  const osc2 = ctx.createOscillator();
+  const g2 = ctx.createGain();
+  osc2.type = 'sine';
+  osc2.frequency.setValueAtTime(freq * 3/2, now);
+  g2.gain.setValueAtTime(0, now);
+  g2.gain.linearRampToValueAtTime(gain * 0.4, now + duration * 0.3);
+  g2.gain.exponentialRampToValueAtTime(0.001, now + duration * 0.8);
+
+  osc2.connect(g2);
+  g2.connect(wetGain);
+  osc2.start(now);
+  osc2.stop(now + duration * 0.8);
+
+  // New articles: add a bright "surface sparkle"
+  if (isNew) {
+    const sparkle = ctx.createOscillator();
+    const sG = ctx.createGain();
+    sparkle.type = 'sine';
+    sparkle.frequency.setValueAtTime(freq * 4, now + 0.5);
+    sG.gain.setValueAtTime(0, now + 0.5);
+    sG.gain.linearRampToValueAtTime(gain * 0.08, now + 0.6);
+    sG.gain.exponentialRampToValueAtTime(0.001, now + 1.5);
+
+    sparkle.connect(sG);
+    sG.connect(wetGain);
+    sparkle.start(now + 0.5);
+    sparkle.stop(now + 1.5);
   }
 }
 

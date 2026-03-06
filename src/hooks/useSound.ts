@@ -6,7 +6,7 @@ import { extractLanguage } from '@/utils/geo';
 import { playEditSound, resumeAudioContext } from '@/lib/sound';
 import { SoundPreset } from '@/lib/types';
 
-const RAND_PRESETS: SoundPreset[] = ['chord', 'piano', 'ambient', 'minimal'];
+const RAND_PRESETS: SoundPreset[] = ['chord', 'piano', 'ambient', 'minimal', 'raindrop', 'kalimba', 'ocean'];
 const RAND_INTERVAL = 15000;
 
 export function useSound() {

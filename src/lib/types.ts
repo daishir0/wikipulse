@@ -114,7 +114,7 @@ export interface SessionStatsData {
 }
 
 // Sound Settings
-export type SoundPreset = 'piano' | 'chord' | 'ambient' | 'minimal' | 'rand';
+export type SoundPreset = 'piano' | 'chord' | 'ambient' | 'minimal' | 'raindrop' | 'kalimba' | 'ocean' | 'rand';
 
 export interface SoundSettings {
   enabled: boolean;

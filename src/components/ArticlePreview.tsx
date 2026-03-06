@@ -11,7 +11,7 @@ export default function ArticlePreview() {
   const setSelectedEvent = useStore((s) => s.setSelectedEvent);
   const previewArticle = useStore((s) => s.previewArticle);
   const setPreviewArticle = useStore((s) => s.setPreviewArticle);
-  const setWikiBotRequest = useStore((s) => s.setWikiBotRequest);
+  const pushWikiBotQueue = useStore((s) => s.pushWikiBotQueue);
   const botEnabled = useStore((s) => s.botEnabled);
   const [preview, setPreview] = useState<ArticlePreviewType | null>(null);
   const [loading, setLoading] = useState(false);
@@ -96,7 +96,7 @@ export default function ArticlePreview() {
             {botEnabled && activeWiki && activeTitle && (
               <button
                 onClick={() => {
-                  setWikiBotRequest({ title: activeTitle, wiki: activeWiki });
+                  pushWikiBotQueue({ title: activeTitle, wiki: activeWiki });
                   handleClose();
                 }}
                 className="flex items-center justify-center gap-2 w-full py-2 mt-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm transition-colors">
