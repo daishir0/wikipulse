@@ -153,7 +153,7 @@ export const useStore = create<GlobalState>()(
     connectionStatus: 'disconnected',
     globeCamera: null,
     vizMode: 'beam',
-    sound: { enabled: false, volume: 0.5 },
+    sound: { enabled: false, volume: 0.5, preset: 'rand' as const },
     playbackState: 'live',
     autoRotate: true,
     showTutorial: false,

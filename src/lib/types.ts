@@ -114,9 +114,12 @@ export interface SessionStatsData {
 }
 
 // Sound Settings
+export type SoundPreset = 'piano' | 'chord' | 'ambient' | 'minimal' | 'rand';
+
 export interface SoundSettings {
   enabled: boolean;
   volume: number;
+  preset: SoundPreset;
 }
 
 // Camera Preset

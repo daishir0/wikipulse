@@ -1,4 +1,5 @@
 import { LANGUAGE_SOUND_MAP } from './constants';
+import { SoundPreset } from './types';
 
 let audioContext: AudioContext | null = null;
 let reverbNode: ConvolverNode | null = null;
@@ -8,6 +9,66 @@ let masterGain: GainNode | null = null;
 
 // Pentatonic scale intervals for harmonious random notes (C major pentatonic)
 const PENTATONIC_RATIOS = [1, 9/8, 5/4, 3/2, 5/3]; // C D E G A
+
+// Chord voicings - each is a set of frequency ratios forming a pleasant chord
+const CHORD_VOICINGS = [
+  // Major triad (root, maj3, p5)
+  [1, 5/4, 3/2],
+  // Major 7th (root, maj3, p5, maj7)
+  [1, 5/4, 3/2, 15/8],
+  // Add9 (root, maj3, p5, maj9)
+  [1, 5/4, 3/2, 9/4],
+  // Sus2 (root, maj2, p5)
+  [1, 9/8, 3/2],
+  // Minor triad (root, min3, p5)
+  [1, 6/5, 3/2],
+  // Minor 7th (root, min3, p5, min7)
+  [1, 6/5, 3/2, 9/5],
+  // Major 6th (root, maj3, p5, maj6)
+  [1, 5/4, 3/2, 5/3],
+  // Power + octave (root, p5, octave) - open, spacious
+  [1, 3/2, 2],
+];
+
+// Chord root notes per language - tuned to work well together across languages
+// Using intervals from C major / A minor scale to avoid dissonance between simultaneous edits
+const CHORD_ROOT_MAP: Record<string, number> = {
+  en: 261.63,  // C4
+  ja: 293.66,  // D4
+  zh: 329.63,  // E4
+  de: 349.23,  // F4
+  fr: 392.00,  // G4
+  es: 440.00,  // A4
+  ru: 261.63,  // C4
+  ko: 329.63,  // E4
+  ar: 392.00,  // G4
+  hi: 293.66,  // D4
+  nl: 349.23,  // F4
+  pl: 440.00,  // A4
+  sv: 261.63,  // C4
+  vi: 329.63,  // E4
+  uk: 392.00,  // G4
+  cs: 293.66,  // D4
+  id: 349.23,  // F4
+  th: 440.00,  // A4
+  fa: 261.63,  // C4
+  he: 329.63,  // E4
+  tr: 392.00,  // G4
+  default: 261.63,
+};
+
+// Each language gets a preferred voicing index for variety
+const LANG_VOICING_MAP: Record<string, number[]> = {
+  en: [0, 1, 6],     // Major, Maj7, Maj6
+  ja: [2, 3, 7],     // Add9, Sus2, Power+Oct
+  zh: [1, 6, 0],     // Maj7, Maj6, Major
+  de: [3, 7, 2],     // Sus2, Power+Oct, Add9
+  fr: [0, 2, 1],     // Major, Add9, Maj7
+  es: [6, 0, 3],     // Maj6, Major, Sus2
+  ru: [4, 5, 7],     // Minor, Min7, Power+Oct
+  ko: [2, 0, 6],     // Add9, Major, Maj6
+  default: [0, 1, 3], // Major, Maj7, Sus2
+};
 
 function getAudioContext(): AudioContext {
   if (!audioContext) {
@@ -66,21 +127,44 @@ export function playEditSound(
   lang: string,
   byteDiff: number,
   isNew: boolean,
-  volume: number
+  volume: number,
+  preset: SoundPreset = 'piano'
 ) {
   if (volume <= 0) return;
 
   const ctx = getAudioContext();
   if (ctx.state === 'suspended') return;
 
-  const soundConfig = LANGUAGE_SOUND_MAP[lang] || LANGUAGE_SOUND_MAP.default;
   const now = ctx.currentTime;
 
-  // Pick a pentatonic note for variety
+  switch (preset) {
+    case 'piano':
+      playPresetPiano(ctx, lang, byteDiff, isNew, volume, now);
+      break;
+    case 'chord':
+      playPresetChord(ctx, lang, byteDiff, isNew, volume, now);
+      break;
+    case 'ambient':
+      playPresetAmbient(ctx, lang, byteDiff, isNew, volume, now);
+      break;
+    case 'minimal':
+      playPresetMinimal(ctx, lang, byteDiff, isNew, volume, now);
+      break;
+  }
+}
+
+// ============================================================
+// Preset: Piano (original)
+// ============================================================
+function playPresetPiano(
+  ctx: AudioContext, lang: string, byteDiff: number, isNew: boolean,
+  volume: number, now: number
+) {
+  const soundConfig = LANGUAGE_SOUND_MAP[lang] || LANGUAGE_SOUND_MAP.default;
+
   const pentatonicIndex = Math.floor(Math.random() * PENTATONIC_RATIOS.length);
   const pentatonicRatio = PENTATONIC_RATIOS[pentatonicIndex];
 
-  // Pitch based on edit size
   const absDiff = Math.abs(byteDiff);
   let freqMultiplier = pentatonicRatio;
   if (absDiff > 1000) freqMultiplier *= 0.5;
@@ -97,6 +181,216 @@ export function playEditSound(
     playPianoTone(ctx, frequency, gain, now);
   }
 }
+
+// ============================================================
+// Preset: Chord (和音) - pleasant chords per edit
+// ============================================================
+function playPresetChord(
+  ctx: AudioContext, lang: string, byteDiff: number, isNew: boolean,
+  volume: number, now: number
+) {
+  if (!reverbNode || !masterGain) return;
+
+  const rootFreq = CHORD_ROOT_MAP[lang] || CHORD_ROOT_MAP.default;
+  const voicingIndices = LANG_VOICING_MAP[lang] || LANG_VOICING_MAP.default;
+
+  // Pick voicing based on edit characteristics
+  const absDiff = Math.abs(byteDiff);
+  let voicingIdx: number;
+  if (isNew) {
+    voicingIdx = voicingIndices[0]; // Brightest voicing for new articles
+  } else if (absDiff > 500) {
+    voicingIdx = voicingIndices[1]; // Second voicing for major edits
+  } else {
+    voicingIdx = voicingIndices[2]; // Third for minor edits
+  }
+  const voicing = CHORD_VOICINGS[voicingIdx];
+
+  // Octave shift based on edit size
+  let octaveShift = 1;
+  if (absDiff > 1000) octaveShift = 0.5;   // Lower octave for very large edits
+  else if (absDiff < 50) octaveShift = 2;   // Higher octave for tiny edits
+  else if (absDiff < 200) octaveShift = 1.5;
+
+  const gain = volume * (isNew ? 0.07 : 0.055);
+
+  const wetGain = ctx.createGain();
+  wetGain.gain.value = 0.7;
+  wetGain.connect(reverbNode);
+
+  const dryGain = ctx.createGain();
+  dryGain.gain.value = 0.3;
+  dryGain.connect(masterGain);
+
+  const duration = isNew ? 3.0 : 2.0 + Math.random() * 0.5;
+
+  // Play each note of the chord with slight staggering for a "strummed" feel
+  voicing.forEach((ratio, i) => {
+    const freq = rootFreq * ratio * octaveShift;
+    const stagger = isNew ? i * 0.06 : i * 0.015; // New articles get arpeggio feel
+    const startTime = now + stagger;
+    const noteGain = gain * (i === 0 ? 1.0 : 0.7); // Root is slightly louder
+
+    // Main tone
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(freq, startTime);
+    g.gain.setValueAtTime(0, startTime);
+    g.gain.linearRampToValueAtTime(noteGain, startTime + 0.008);
+    g.gain.exponentialRampToValueAtTime(noteGain * 0.3, startTime + 0.12);
+    g.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+
+    osc.connect(g);
+    g.connect(dryGain);
+    g.connect(wetGain);
+    osc.start(startTime);
+    osc.stop(startTime + duration);
+
+    // Detuned copy for warmth
+    const oscD = ctx.createOscillator();
+    const gD = ctx.createGain();
+    oscD.type = 'sine';
+    oscD.frequency.setValueAtTime(freq * 1.002, startTime);
+    gD.gain.setValueAtTime(0, startTime);
+    gD.gain.linearRampToValueAtTime(noteGain * 0.25, startTime + 0.008);
+    gD.gain.exponentialRampToValueAtTime(0.001, startTime + duration * 0.6);
+
+    oscD.connect(gD);
+    gD.connect(wetGain);
+    oscD.start(startTime);
+    oscD.stop(startTime + duration * 0.6);
+  });
+
+  // For new articles, add a high shimmer overtone
+  if (isNew) {
+    const shimmer = ctx.createOscillator();
+    const sG = ctx.createGain();
+    shimmer.type = 'sine';
+    shimmer.frequency.setValueAtTime(rootFreq * 4 * octaveShift, now);
+    sG.gain.setValueAtTime(0, now);
+    sG.gain.linearRampToValueAtTime(gain * 0.03, now + 0.003);
+    sG.gain.exponentialRampToValueAtTime(0.001, now + 0.8);
+
+    shimmer.connect(sG);
+    sG.connect(wetGain);
+    shimmer.start(now);
+    shimmer.stop(now + 0.8);
+  }
+}
+
+// ============================================================
+// Preset: Ambient - soft pad-like sustained tones
+// ============================================================
+function playPresetAmbient(
+  ctx: AudioContext, lang: string, byteDiff: number, isNew: boolean,
+  volume: number, now: number
+) {
+  if (!reverbNode || !masterGain) return;
+
+  const rootFreq = CHORD_ROOT_MAP[lang] || CHORD_ROOT_MAP.default;
+  // Use lower octave for ambient warmth
+  const freq = rootFreq * (isNew ? 1 : 0.5);
+  const gain = volume * 0.04;
+  const duration = 4.0 + Math.random() * 2.0;
+
+  const wetGain = ctx.createGain();
+  wetGain.gain.value = 0.9; // Heavy reverb for ambient
+  wetGain.connect(reverbNode);
+
+  const dryGain = ctx.createGain();
+  dryGain.gain.value = 0.1;
+  dryGain.connect(masterGain);
+
+  // Slow-attack pad tone with perfect 5th
+  const notes = isNew ? [1, 3/2, 2] : [1, 3/2];
+
+  notes.forEach((ratio) => {
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(freq * ratio, now);
+    // Slow attack for pad feel
+    g.gain.setValueAtTime(0, now);
+    g.gain.linearRampToValueAtTime(gain, now + 0.3);
+    g.gain.setValueAtTime(gain, now + duration * 0.4);
+    g.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+    osc.connect(g);
+    g.connect(dryGain);
+    g.connect(wetGain);
+    osc.start(now);
+    osc.stop(now + duration);
+
+    // Slight detune for chorus/width
+    const oscD = ctx.createOscillator();
+    const gD = ctx.createGain();
+    oscD.type = 'sine';
+    oscD.frequency.setValueAtTime(freq * ratio * 0.998, now);
+    gD.gain.setValueAtTime(0, now);
+    gD.gain.linearRampToValueAtTime(gain * 0.5, now + 0.4);
+    gD.gain.exponentialRampToValueAtTime(0.001, now + duration * 0.8);
+
+    oscD.connect(gD);
+    gD.connect(wetGain);
+    oscD.start(now);
+    oscD.stop(now + duration * 0.8);
+  });
+}
+
+// ============================================================
+// Preset: Minimal - clean, simple single tones
+// ============================================================
+function playPresetMinimal(
+  ctx: AudioContext, lang: string, byteDiff: number, isNew: boolean,
+  volume: number, now: number
+) {
+  if (!masterGain) return;
+
+  const rootFreq = CHORD_ROOT_MAP[lang] || CHORD_ROOT_MAP.default;
+  const absDiff = Math.abs(byteDiff);
+
+  // Simple octave mapping based on size
+  let freq = rootFreq;
+  if (absDiff > 1000) freq *= 0.5;
+  else if (absDiff < 50) freq *= 2;
+
+  const gain = volume * (isNew ? 0.06 : 0.04);
+  const duration = isNew ? 0.8 : 0.4;
+
+  const osc = ctx.createOscillator();
+  const g = ctx.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(freq, now);
+  g.gain.setValueAtTime(0, now);
+  g.gain.linearRampToValueAtTime(gain, now + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+  osc.connect(g);
+  g.connect(masterGain);
+  osc.start(now);
+  osc.stop(now + duration);
+
+  // New articles get a soft octave above
+  if (isNew) {
+    const osc2 = ctx.createOscillator();
+    const g2 = ctx.createGain();
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(freq * 2, now + 0.05);
+    g2.gain.setValueAtTime(0, now + 0.05);
+    g2.gain.linearRampToValueAtTime(gain * 0.3, now + 0.06);
+    g2.gain.exponentialRampToValueAtTime(0.001, now + duration * 0.6);
+
+    osc2.connect(g2);
+    g2.connect(masterGain);
+    osc2.start(now + 0.05);
+    osc2.stop(now + duration * 0.6);
+  }
+}
+
+// ============================================================
+// Original helper functions (used by Piano preset)
+// ============================================================
 
 // Piano-like tone: quick hammer attack, harmonic decay, sparkle overtones
 function playPianoTone(
@@ -119,18 +413,18 @@ function playPianoTone(
   delaySend.gain.value = 0.12;
   delaySend.connect(delayNode);
 
-  const duration = 1.5 + Math.random() * 1.0; // 1.5-2.5s
+  const duration = 1.5 + Math.random() * 1.0;
 
-  // Fundamental — piano hammer strike: sharp attack, fast initial decay, slow sustain
+  // Fundamental
   const osc1 = ctx.createOscillator();
   const g1 = ctx.createGain();
   osc1.type = 'sine';
   osc1.frequency.setValueAtTime(frequency, now);
   g1.gain.setValueAtTime(0, now);
-  g1.gain.linearRampToValueAtTime(gain, now + 0.005); // Very fast attack (hammer)
-  g1.gain.exponentialRampToValueAtTime(gain * 0.4, now + 0.08); // Fast initial decay
-  g1.gain.exponentialRampToValueAtTime(gain * 0.15, now + 0.5); // Sustain
-  g1.gain.exponentialRampToValueAtTime(0.001, now + duration); // Long release
+  g1.gain.linearRampToValueAtTime(gain, now + 0.005);
+  g1.gain.exponentialRampToValueAtTime(gain * 0.4, now + 0.08);
+  g1.gain.exponentialRampToValueAtTime(gain * 0.15, now + 0.5);
+  g1.gain.exponentialRampToValueAtTime(0.001, now + duration);
 
   osc1.connect(g1);
   g1.connect(dryGain);
@@ -139,7 +433,7 @@ function playPianoTone(
   osc1.start(now);
   osc1.stop(now + duration);
 
-  // 2nd harmonic (octave above) — brightness
+  // 2nd harmonic
   const osc2 = ctx.createOscillator();
   const g2 = ctx.createGain();
   osc2.type = 'sine';
@@ -154,7 +448,7 @@ function playPianoTone(
   osc2.start(now);
   osc2.stop(now + duration * 0.6);
 
-  // 3rd harmonic (sparkle) — gives the "キラキラ" quality
+  // 3rd harmonic
   const osc3 = ctx.createOscillator();
   const g3 = ctx.createGain();
   osc3.type = 'sine';
@@ -168,7 +462,7 @@ function playPianoTone(
   osc3.start(now);
   osc3.stop(now + 0.4);
 
-  // 5th harmonic (shimmer) — subtle high sparkle
+  // 5th harmonic
   const osc5 = ctx.createOscillator();
   const g5 = ctx.createGain();
   osc5.type = 'sine';
@@ -182,11 +476,11 @@ function playPianoTone(
   osc5.start(now);
   osc5.stop(now + 0.2);
 
-  // Slight detuned copy for piano string chorus effect
+  // Detuned copy for chorus
   const oscDetune = ctx.createOscillator();
   const gDetune = ctx.createGain();
   oscDetune.type = 'sine';
-  oscDetune.frequency.setValueAtTime(frequency * 1.002, now); // ~3 cent sharp
+  oscDetune.frequency.setValueAtTime(frequency * 1.002, now);
   gDetune.gain.setValueAtTime(0, now);
   gDetune.gain.linearRampToValueAtTime(gain * 0.3, now + 0.005);
   gDetune.gain.exponentialRampToValueAtTime(gain * 0.1, now + 0.1);
@@ -198,7 +492,7 @@ function playPianoTone(
   oscDetune.stop(now + duration * 0.8);
 }
 
-// Sparkle chime for new articles — cascading piano arpeggios with shimmer
+// Sparkle chime for new articles (Piano preset)
 function playSparkleChime(
   ctx: AudioContext,
   baseFreq: number,
@@ -219,7 +513,6 @@ function playSparkleChime(
   dryGain.gain.value = 0.15;
   dryGain.connect(masterGain);
 
-  // Ascending pentatonic arpeggio: root, 3rd, 5th, octave, octave+3rd
   const notes = [1, 5/4, 3/2, 2, 5/2];
   const totalDuration = 3.0;
 
@@ -227,7 +520,6 @@ function playSparkleChime(
     const startTime = now + i * 0.1;
     const noteDuration = totalDuration - i * 0.1;
 
-    // Main piano note
     const osc = ctx.createOscillator();
     const g = ctx.createGain();
     osc.type = 'sine';
@@ -245,7 +537,6 @@ function playSparkleChime(
     osc.start(startTime);
     osc.stop(startTime + noteDuration);
 
-    // Detuned copy for richness
     const oscD = ctx.createOscillator();
     const gD = ctx.createGain();
     oscD.type = 'sine';
@@ -259,7 +550,6 @@ function playSparkleChime(
     oscD.start(startTime);
     oscD.stop(startTime + noteDuration * 0.7);
 
-    // Sparkle overtone (3rd harmonic — high shimmer)
     const sparkle = ctx.createOscillator();
     const sG = ctx.createGain();
     sparkle.type = 'sine';

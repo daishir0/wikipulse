@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useWikipediaStream } from '@/hooks/useWikipediaStream';
 import { useSound } from '@/hooks/useSound';
@@ -13,9 +13,7 @@ import Tutorial from '@/components/Tutorial';
 import ArticlePreview from '@/components/ArticlePreview';
 import WikiBot from '@/components/WikiBot';
 import { useStore } from '@/store';
-import { Menu, HelpCircle, Maximize, Minimize, Sun, SunMoon, Bot } from 'lucide-react';
-import { CAMERA_PRESETS } from '@/lib/constants';
-import type { GlobeMethods } from 'react-globe.gl';
+import { Menu, HelpCircle, Maximize, Minimize, Sun, SunMoon, Bot, RotateCw } from 'lucide-react';
 
 const GlobeComponent = dynamic(() => import('@/components/Globe'), {
   ssr: false,
@@ -110,6 +108,13 @@ export default function Home() {
       <div className="fixed top-4 right-4 z-20 flex items-center gap-2">
         <SoundControls />
         <HeatmapToggle />
+        <button onClick={() => setAutoRotate(!autoRotate)}
+          className={`p-2 rounded-lg transition-colors ${
+            autoRotate ? 'bg-blue-600/50 hover:bg-blue-600/70' : 'bg-white/10 hover:bg-white/20'
+          }`}
+          title={autoRotate ? 'Auto Rotate: ON' : 'Auto Rotate: OFF'}>
+          <RotateCw className={`w-5 h-5 ${autoRotate ? 'text-blue-300' : 'text-gray-400'}`} />
+        </button>
         <button onClick={() => setDayNightEnabled(!dayNightEnabled)}
           className={`p-2 rounded-lg transition-colors ${
             dayNightEnabled ? 'bg-yellow-600/50 hover:bg-yellow-600/70' : 'bg-white/10 hover:bg-white/20'
@@ -141,26 +146,6 @@ export default function Home() {
         </button>
       </div>
 
-      {/* Left side: Camera presets */}
-      <div className="fixed left-4 top-1/2 -translate-y-1/2 z-20 flex flex-col gap-1">
-        {CAMERA_PRESETS.map((preset) => (
-          <button
-            key={preset.name}
-            className="px-2 py-1 text-xs rounded bg-black/50 hover:bg-white/20 text-white/70 hover:text-white transition-colors whitespace-nowrap backdrop-blur-sm"
-            title={preset.label}
-          >
-            {preset.label}
-          </button>
-        ))}
-        <button
-          onClick={() => setAutoRotate(!autoRotate)}
-          className={`px-2 py-1 text-xs rounded transition-colors whitespace-nowrap backdrop-blur-sm ${
-            autoRotate ? 'bg-blue-600/50 text-white' : 'bg-black/50 text-gray-400 hover:bg-white/20'
-          }`}
-        >
-          {autoRotate ? '🔄 Auto' : '⏸ Stop'}
-        </button>
-      </div>
 
       <WikiBot />
       <SidePanel isOpen={isPanelOpen} onClose={() => setIsPanelOpen(false)} />
