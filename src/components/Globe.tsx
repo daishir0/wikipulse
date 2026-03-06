@@ -12,6 +12,17 @@ const GlobeGL = dynamic(() => import('react-globe.gl'), { ssr: false, loading: (
 
 const GLOBE_RADIUS = 100;
 
+function getEditSizeColor(byteDiff: number, type: string, isBot: boolean): string {
+  if (isBot) return '#6B7280';
+  if (type === 'new') return '#FFD700';
+  if (byteDiff >= 1000) return '#EF4444';
+  if (byteDiff >= 500) return '#F97316';
+  if (byteDiff >= 100) return '#3B82F6';
+  if (byteDiff >= 0) return '#60A5FA';
+  if (byteDiff < -200) return '#A855F7';
+  return '#818CF8';
+}
+
 function latLngToVector3(lat: number, lng: number, altitude: number = 0): THREE.Vector3 {
   const phi = (90 - lat) * (Math.PI / 180);
   const theta = (lng + 180) * (Math.PI / 180);
@@ -42,6 +53,7 @@ export default function Globe() {
   const setGlobeCamera = useStore((s) => s.setGlobeCamera);
   const setFocusBurst = useStore((s) => s.setFocusBurst);
   const dayNightEnabled = useStore((s) => s.dayNightEnabled);
+  const globeBrightness = useStore((s) => s.globeBrightness);
   const sunPosition = useDayNight();
   const defaultLightsRef = useRef<{ type: string; intensity: number; position?: THREE.Vector3 }[]>([]);
 
@@ -67,11 +79,14 @@ export default function Globe() {
         const botMult = event.bot ? 0.6 : 1;
         const finalOpacity = opacity * botMult;
 
+        const byteDiff = event.lengthNew - event.lengthOld;
+        const color = getEditSizeColor(byteDiff, event.type, event.bot);
+
         return {
           lat: event.position.lat,
           lng: event.position.lng,
           altitude: 0.01,
-          color: event.color,
+          color,
           radius: finalOpacity > 0 ? event.size * 0.8 * botMult * (isNew ? 1.3 : isMajor ? 1.15 : 1) : 0,
           opacity: finalOpacity,
         };
@@ -136,6 +151,9 @@ export default function Globe() {
 
       const cam: GlobeCamera = {
         getScreenPosition: (lat, lng, altitude) => {
+          const coords = globe.getScreenCoords(lat, lng, altitude);
+          if (!coords) return null;
+          // Visibility check: is the point facing the camera?
           const camera = globe.camera();
           if (!camera) return null;
           const position = latLngToVector3(lat, lng, altitude);
@@ -143,11 +161,9 @@ export default function Globe() {
           const pointToCamera = cameraPos.sub(position).normalize();
           const surfaceNormal = position.clone().normalize();
           const visible = pointToCamera.dot(surfaceNormal) > -0.1;
-          const projected = position.clone().project(camera);
-          const rect = container.getBoundingClientRect();
           return {
-            x: ((projected.x + 1) / 2) * rect.width,
-            y: ((-projected.y + 1) / 2) * rect.height,
+            x: coords.x,
+            y: coords.y,
             visible,
           };
         },
@@ -188,13 +204,15 @@ export default function Globe() {
     const ourSun = scene.children.filter((c: THREE.Object3D) => c.name === 'wp-sun-light');
     ourSun.forEach((l: THREE.Object3D) => scene.remove(l));
 
+    const b = globeBrightness;
+
     if (dayNightEnabled) {
       scene.children.forEach((c: THREE.Object3D) => {
-        if (c instanceof THREE.AmbientLight) c.intensity = 0.2;
-        if (c instanceof THREE.DirectionalLight && c.name !== 'wp-sun-light') c.intensity = 0.1;
+        if (c instanceof THREE.AmbientLight) c.intensity = 0.2 * b;
+        if (c instanceof THREE.DirectionalLight && c.name !== 'wp-sun-light') c.intensity = 0.1 * b;
       });
 
-      const sunLight = new THREE.DirectionalLight(0xffeedd, 2.0);
+      const sunLight = new THREE.DirectionalLight(0xffeedd, 2.0 * b);
       sunLight.name = 'wp-sun-light';
 
       const phi = (90 - sunPosition.lat) * (Math.PI / 180);
@@ -208,11 +226,11 @@ export default function Globe() {
       scene.add(sunLight);
     } else {
       scene.children.forEach((c: THREE.Object3D) => {
-        if (c instanceof THREE.AmbientLight) c.intensity = 0.8;
-        if (c instanceof THREE.DirectionalLight && c.name !== 'wp-sun-light') c.intensity = 0.6;
+        if (c instanceof THREE.AmbientLight) c.intensity = 0.8 * b;
+        if (c instanceof THREE.DirectionalLight && c.name !== 'wp-sun-light') c.intensity = 0.6 * b;
       });
     }
-  }, [isReady, sunPosition, dayNightEnabled]);
+  }, [isReady, sunPosition, dayNightEnabled, globeBrightness]);
 
   return (
     <div ref={containerRef} className="relative w-full h-full bg-black">

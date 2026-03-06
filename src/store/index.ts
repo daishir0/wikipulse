@@ -141,6 +141,10 @@ interface GlobalState {
   setFocusBurst: (burst: { lat: number; lng: number; screenX: number; screenY: number; timestamp: number } | null) => void;
 
 
+  // Globe brightness (0.2 - 2.0)
+  globeBrightness: number;
+  setGlobeBrightness: (value: number) => void;
+
   // WikiBot
   botEnabled: boolean;
   setBotEnabled: (value: boolean) => void;
@@ -193,7 +197,9 @@ export const useStore = create<GlobalState>()(
     previewArticle: null,
     editRipples: [],
     focusBurst: null,
+    globeBrightness: 2.0,
     botEnabled: true,
+    setGlobeBrightness: (value) => set((d) => { d.globeBrightness = value; }),
     setFocusBurst: (burst) => set((d) => { d.focusBurst = burst; }),
     setPreviewArticle: (article) => set((d) => { d.previewArticle = article; }),
     setBotEnabled: (value) => set((d) => { d.botEnabled = value; }),
