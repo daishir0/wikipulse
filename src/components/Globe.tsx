@@ -38,6 +38,7 @@ export default function Globe() {
   const filter = useStore((s) => s.filter);
   const autoRotate = useStore((s) => s.autoRotate);
   const editBattles = useStore((s) => s.editBattles);
+  const editRipples = useStore((s) => s.editRipples);
   const setSelectedEvent = useStore((s) => s.setSelectedEvent);
   const setGlobeCamera = useStore((s) => s.setGlobeCamera);
   const dayNightEnabled = useStore((s) => s.dayNightEnabled);
@@ -87,9 +88,9 @@ export default function Globe() {
       .filter((p) => p.opacity > 0);
   }, [editEvents, now, filter.languages]);
 
-  // Edit battle rings
+  // Edit battle rings + edit ripples
   const ringsData = useMemo(() => {
-    return editBattles.map((b) => ({
+    const battleRings = editBattles.map((b) => ({
       lat: b.lat,
       lng: b.lng,
       maxR: 3 + b.editCount * 0.5,
@@ -97,7 +98,26 @@ export default function Globe() {
       repeatPeriod: 1000,
       color: () => 'rgba(255, 100, 50, 0.6)',
     }));
-  }, [editBattles]);
+
+    // Convert hex color to rgba
+    const hexToRgba = (hex: string, alpha: number) => {
+      const r = parseInt(hex.slice(1, 3), 16);
+      const g = parseInt(hex.slice(3, 5), 16);
+      const b = parseInt(hex.slice(5, 7), 16);
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    };
+
+    const rippleRings = editRipples.map((r) => ({
+      lat: r.lat,
+      lng: r.lng,
+      maxR: 4,
+      propagationSpeed: 3,
+      repeatPeriod: 3000,
+      color: () => hexToRgba(r.color, 0.5),
+    }));
+
+    return [...battleRings, ...rippleRings];
+  }, [editBattles, editRipples]);
 
   const labelsData = useMemo(() => {
     return pointsData
@@ -221,7 +241,7 @@ export default function Globe() {
         ref={globeRef}
         globeImageUrl="//unpkg.com/three-globe/example/img/earth-blue-marble.jpg"
         bumpImageUrl="//unpkg.com/three-globe/example/img/earth-topology.png"
-        backgroundImageUrl="//unpkg.com/three-globe/example/img/night-sky.png"
+        backgroundImageUrl="/textures/starmap_nasa.jpg"
         onGlobeReady={handleGlobeReady}
         pointsData={pointsData}
         pointLat="lat"

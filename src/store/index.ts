@@ -17,6 +17,7 @@ import {
   ArticlePreview,
   EditSizeCategory,
   TimelineEntry,
+  EditRipple,
 } from '@/lib/types';
 import { LANGUAGE_COLOR_MAP, BOT_COLOR, EDIT_SIZE_MAP } from '@/lib/constants';
 import { extractLanguage, getPositionForLanguage } from '@/utils/geo';
@@ -129,6 +130,9 @@ interface GlobalState {
   previewArticle: { wiki: string; title: string } | null;
   setPreviewArticle: (article: { wiki: string; title: string } | null) => void;
 
+  // Edit ripples
+  editRipples: EditRipple[];
+
   // WikiBot
   botEnabled: boolean;
   setBotEnabled: (value: boolean) => void;
@@ -179,6 +183,7 @@ export const useStore = create<GlobalState>()(
     heatmapData: [],
     timelineHistory: [],
     previewArticle: null,
+    editRipples: [],
 
     botEnabled: true,
     setPreviewArticle: (article) => set((d) => { d.previewArticle = article; }),
@@ -314,6 +319,17 @@ export const useStore = create<GlobalState>()(
         .map((e) => ({ title: e.title, wiki: e.wiki, time: now }))
         .reverse();
 
+      // Pre-compute ripples for notable edits (new articles or large edits)
+      const newRipples: EditRipple[] = processedEvents
+        .filter((pe) => !pe.event.bot && (pe.event.type === 'new' || pe.byteDiff >= 500))
+        .map((pe) => ({
+          id: `ripple-${pe.event.id || now}-${Math.random()}`,
+          lat: pe.position.lat,
+          lng: pe.position.lng,
+          color: getColorForLanguage(pe.event.wiki, false),
+          createdAt: now,
+        }));
+
       // SINGLE Immer set() for entire batch — minimal proxy reads
       set((d) => {
         d.recentEditsForStats = newRecentEditsForStats;
@@ -375,6 +391,9 @@ export const useStore = create<GlobalState>()(
 
         if (newEditEvents.length > 0) {
           d.editEvents = [...newEditEvents, ...d.editEvents].slice(0, MAX_EVENTS);
+        }
+        if (newRipples.length > 0) {
+          d.editRipples = [...newRipples, ...d.editRipples].slice(0, 20);
         }
 
         // Stats (computed once for batch)
@@ -453,11 +472,13 @@ export const useStore = create<GlobalState>()(
       // Pre-compute filtered arrays OUTSIDE Immer (no proxy overhead)
       const filteredEditEvents = state.editEvents.filter((e) => now - e.createdAt < EVENT_TTL_MS);
       const filteredMilestones = state.stats.milestones.filter((m) => now - m.timestamp < 5000);
+      const filteredRipples = state.editRipples.filter((r) => now - r.createdAt < 3000);
 
       // Single Immer pass — only assignments, no reads through proxy
       set((d) => {
         d.editEvents = filteredEditEvents;
         d.stats.milestones = filteredMilestones;
+        d.editRipples = filteredRipples;
         for (const key of keysToDelete) {
           delete d.articleEditHistory[key];
         }

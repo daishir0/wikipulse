@@ -152,6 +152,15 @@ export interface TimelineEntry {
   timestamp: number;
 }
 
+// Edit Ripple (visual ring effect for notable edits)
+export interface EditRipple {
+  id: string;
+  lat: number;
+  lng: number;
+  color: string;
+  createdAt: number;
+}
+
 // Raw Event Stream Data from Wikipedia
 export interface RawEventStreamData {
   $schema: string;

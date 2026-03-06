@@ -77,6 +77,7 @@ export default function WikiBot() {
   const [displayedText, setDisplayedText] = useState('');
   const [isThinking, setIsThinking] = useState(false);
   const [typingDone, setTypingDone] = useState(false);
+  const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const typingRef = useRef<NodeJS.Timeout | null>(null);
   const fetchingRef = useRef(false);
@@ -130,6 +131,24 @@ export default function WikiBot() {
         setCurrentComment(data.comment);
         setCommentVersion((v) => v + 1); // Force typing restart even if text is same
         setIsThinking(false);
+        setThumbnailUrl(null);
+
+        // Fetch thumbnail for the article mentioned in the comment
+        const articleTitle = extractFirstTitle(data.comment);
+        if (articleTitle) {
+          // Find language from recent edits
+          const timeline = useStore.getState().timelineHistory;
+          const matchingEdit = timeline.find((e) => e.title === articleTitle);
+          const lang = matchingEdit ? extractLanguage(matchingEdit.wiki) : 'en';
+          fetch(`https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(articleTitle)}`)
+            .then((r) => r.json())
+            .then((summary) => {
+              if (summary.thumbnail?.source) {
+                setThumbnailUrl(summary.thumbnail.source);
+              }
+            })
+            .catch(() => { /* ignore thumbnail fetch errors */ });
+        }
       } else {
         console.log('[WikiBot] API returned empty comment');
         setIsThinking(false);
@@ -180,6 +199,7 @@ export default function WikiBot() {
       setCommentVersion(0);
       setDisplayedText('');
       setTypingDone(false);
+      setThumbnailUrl(null);
       currentCommentRef.current = '';
       return;
     }
@@ -264,6 +284,12 @@ export default function WikiBot() {
                         <span className="inline-block w-0.5 h-4 bg-white/70 animate-pulse ml-0.5 align-middle" />
                       )}
                     </p>
+                    {typingDone && thumbnailUrl && (
+                      <div className="mt-2 rounded-lg overflow-hidden">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={thumbnailUrl} alt="" className="w-full h-24 object-cover rounded-lg" />
+                      </div>
+                    )}
                     {typingDone && (() => {
                       const title = extractFirstTitle(currentComment);
                       return title ? <SearchLink keyword={title} /> : null;

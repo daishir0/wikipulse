@@ -21,7 +21,17 @@ interface FloatingTitle {
   isMajor: boolean;
   isBot: boolean;
   byteDiff: number;
+  poeticMessage: string | null;
   event: EditEventWithMeta;
+}
+
+function getPoeticMessage(type: string, byteDiff: number, isBot: boolean): string | null {
+  if (isBot) return null;
+  if (type === 'new') return 'someone added a new page to the world';
+  if (byteDiff >= 500) return 'someone gifted knowledge';
+  if (byteDiff < -200) return 'someone guarded accuracy';
+  if (Math.abs(byteDiff) < 100) return 'someone made a small improvement';
+  return null;
 }
 
 const ANIMATION_DURATION = 5000;
@@ -158,6 +168,7 @@ export default function FloatingTitles() {
         isMajor: byteDiff >= 500,
         isBot: latest.bot,
         byteDiff,
+        poeticMessage: getPoeticMessage(latest.type, byteDiff, latest.bot),
         event: latest,
       };
     });
@@ -260,6 +271,11 @@ export default function FloatingTitles() {
               <span className="ml-1 text-[10px] opacity-50" style={{ color: title.color }}>
                 ({title.title.length > 20 ? title.title.slice(0, 20) + '...' : title.title})
               </span>
+            )}
+            {title.poeticMessage && (
+              <div className="text-[10px] italic opacity-60 mt-0.5" style={{ color: title.color }}>
+                {title.poeticMessage}
+              </div>
             )}
           </div>
         );
