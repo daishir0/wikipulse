@@ -148,7 +148,7 @@ export default function FloatingTitles() {
   const timelineHistory = useStore((s) => s.timelineHistory);
   const pendingTranslations = useRef(new Set<string>());
   const lastSeenEventIdRef = useRef<string | null>(null);
-  const burstActiveRef = useRef(false);
+
 
   useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 100);
@@ -166,9 +166,6 @@ export default function FloatingTitles() {
     }
     if (newEvents.length === 0) return;
     lastSeenEventIdRef.current = editEvents[0].id;
-
-    // Skip normal title additions during burst mode
-    if (burstActiveRef.current) return;
 
     const baseTime = Date.now();
     const newTitles: FloatingTitle[] = newEvents.map((latest, idx) => {
@@ -221,7 +218,6 @@ export default function FloatingTitles() {
 
   useEffect(() => {
     const cleanup = setInterval(() => {
-      if (burstActiveRef.current) return; // Don't clean up during burst
       const t = Date.now();
       setTitles((prev) => prev.filter((title) => t - title.startTime < ANIMATION_DURATION));
     }, 500);
@@ -231,10 +227,7 @@ export default function FloatingTitles() {
   // Focus burst: when globe is clicked, show nearby edits
   // Only trigger on focusBurst changes (not timelineHistory) to avoid re-firing
   useEffect(() => {
-    if (!focusBurst) {
-      burstActiveRef.current = false;
-      return;
-    }
+    if (!focusBurst) return;
 
     const { lat: clickLat, lng: clickLng, screenX, screenY } = focusBurst;
     const snapshot = useStore.getState().timelineHistory;
@@ -249,31 +242,23 @@ export default function FloatingTitles() {
 
     // Prioritize 3 closest languages
     const primaryLangs = new Set(langDistances.slice(0, 3).map((l) => l.lang));
-    const primaryEntries: typeof snapshot = [];
-    const secondaryEntries: typeof snapshot = [];
+    const selected: typeof snapshot = [];
 
     for (const entry of snapshot) {
       const lang = extractLanguage(entry.wiki);
       if (primaryLangs.has(lang)) {
-        primaryEntries.push(entry);
-      } else {
-        secondaryEntries.push(entry);
+        selected.push(entry);
+        if (selected.length >= 50) break;
       }
     }
 
-    const selected = [...primaryEntries.slice(0, 50)];
-    if (selected.length < 50) {
-      selected.push(...secondaryEntries.slice(0, 50 - selected.length));
-    }
-
     if (selected.length > 0) {
-      burstActiveRef.current = true;
       const baseTime = Date.now();
       // Use SCREEN coordinates directly - bypass lat/lng→screen conversion
       const burstTitles: FloatingTitle[] = selected.map((entry, idx) => {
         const lang = extractLanguage(entry.wiki);
         const color = getEditSizeColor(entry.byteDiff, entry.type, entry.bot);
-        const spread = 60; // pixels spread from click center
+        const spread = 200; // pixels spread from click center
 
         return {
           id: `burst-${entry.id}-${idx}`,
@@ -311,7 +296,7 @@ export default function FloatingTitles() {
         };
       });
 
-      setTitles(burstTitles);
+      setTitles((prev) => [...burstTitles, ...prev].slice(0, MAX_TITLES + 50));
     }
 
     // Clear burst after 20 seconds
