@@ -3,13 +3,13 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { useStore } from '@/store';
 import { extractLanguage } from '@/utils/geo';
-import { LANGUAGE_COLOR_MAP, BOT_COLOR } from '@/lib/constants';
+import { LANGUAGE_SHORT_CODE, LANGUAGE_COORDINATES } from '@/lib/constants';
 import { EditEventWithMeta } from '@/lib/types';
 
 interface FloatingTitle {
   id: string;
   title: string;
-  jaTitle: string | null; // Japanese translation
+  jaTitle: string | null;
   color: string;
   startTime: number;
   lat: number;
@@ -23,6 +23,10 @@ interface FloatingTitle {
   byteDiff: number;
   poeticMessage: string | null;
   event: EditEventWithMeta;
+  langCode: string;
+  // For burst titles: fixed screen position (bypass getScreenPosition)
+  fixedScreenX?: number;
+  fixedScreenY?: number;
 }
 
 function getPoeticMessage(type: string, byteDiff: number, isBot: boolean): string | null {
@@ -34,16 +38,34 @@ function getPoeticMessage(type: string, byteDiff: number, isBot: boolean): strin
   return null;
 }
 
-const ANIMATION_DURATION = 5000;
+function getEditSizeColor(byteDiff: number, type: string, isBot: boolean): string {
+  if (isBot) return '#6B7280';
+  if (type === 'new') return '#FFD700';
+  if (byteDiff >= 1000) return '#EF4444';
+  if (byteDiff >= 500) return '#F97316';
+  if (byteDiff >= 100) return '#3B82F6';
+  if (byteDiff >= 0) return '#60A5FA';
+  if (byteDiff < -200) return '#A855F7';
+  return '#818CF8';
+}
+
+function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const toRad = (d: number) => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)) * (180 / Math.PI);
+}
+
+const ANIMATION_DURATION = 12000;
+const BURST_ANIMATION_DURATION = 20000;
 const MAX_TITLES = 20;
 const MAX_CONCURRENT_TRANSLATIONS = 1;
-const TRANSLATION_INTERVAL_MS = 1000; // Min interval between API calls
+const TRANSLATION_INTERVAL_MS = 1000;
 const MAX_CACHE_SIZE = 500;
 
-// Cache for Japanese title translations
 const jaTranslationCache = new Map<string, string | null>();
 
-// Translation queue system to avoid flooding Wikipedia API
 const translationQueue: { wiki: string; title: string; id: string; resolve: (v: string | null) => void }[] = [];
 let activeTranslations = 0;
 let lastFetchTime = 0;
@@ -69,7 +91,6 @@ function processTranslationQueue() {
   }
 }
 
-// Raw fetch (no queue)
 async function doFetchJaTitle(wiki: string, title: string): Promise<string | null> {
   const lang = wiki.replace('wiki', '');
   try {
@@ -89,7 +110,6 @@ async function doFetchJaTitle(wiki: string, title: string): Promise<string | nul
   }
 }
 
-// Queued fetch with cache
 function fetchJaTitle(wiki: string, title: string, id: string): Promise<string | null> {
   const cacheKey = `${wiki}:${title}`;
   if (jaTranslationCache.has(cacheKey)) return Promise.resolve(jaTranslationCache.get(cacheKey)!);
@@ -100,14 +120,12 @@ function fetchJaTitle(wiki: string, title: string, id: string): Promise<string |
     return Promise.resolve(title);
   }
 
-  // Drop if queue is too long (older titles will expire before translation completes)
   if (translationQueue.length >= 5) {
     return Promise.resolve(null);
   }
 
   return new Promise((resolve) => {
     translationQueue.push({ wiki, title, id, resolve: (v) => {
-      // Evict oldest cache entries if too large
       if (jaTranslationCache.size >= MAX_CACHE_SIZE) {
         const firstKey = jaTranslationCache.keys().next().value;
         if (firstKey) jaTranslationCache.delete(firstKey);
@@ -125,8 +143,12 @@ export default function FloatingTitles() {
   const editEvents = useStore((s) => s.editEvents);
   const setSelectedEvent = useStore((s) => s.setSelectedEvent);
   const globeCamera = useStore((s) => s.globeCamera);
+  const focusBurst = useStore((s) => s.focusBurst);
+  const setFocusBurst = useStore((s) => s.setFocusBurst);
+  const timelineHistory = useStore((s) => s.timelineHistory);
   const pendingTranslations = useRef(new Set<string>());
   const lastSeenEventIdRef = useRef<string | null>(null);
+  const burstActiveRef = useRef(false);
 
   useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 100);
@@ -137,7 +159,6 @@ export default function FloatingTitles() {
   useEffect(() => {
     if (editEvents.length === 0) return;
 
-    // Find all new events (editEvents is newest-first)
     const newEvents: EditEventWithMeta[] = [];
     for (const event of editEvents) {
       if (event.id === lastSeenEventIdRef.current) break;
@@ -146,30 +167,33 @@ export default function FloatingTitles() {
     if (newEvents.length === 0) return;
     lastSeenEventIdRef.current = editEvents[0].id;
 
-    // Create floating titles for all new events (stagger startTime slightly)
+    // Skip normal title additions during burst mode
+    if (burstActiveRef.current) return;
+
     const baseTime = Date.now();
     const newTitles: FloatingTitle[] = newEvents.map((latest, idx) => {
       const lang = extractLanguage(latest.wiki);
-      const color = latest.bot ? BOT_COLOR : (LANGUAGE_COLOR_MAP[lang] || LANGUAGE_COLOR_MAP.default);
       const byteDiff = latest.lengthNew - latest.lengthOld;
+      const color = getEditSizeColor(byteDiff, latest.type, latest.bot);
 
       return {
         id: latest.id,
         title: latest.title,
         jaTitle: lang === 'ja' ? latest.title : null,
         color,
-        startTime: baseTime + idx * 40, // Stagger by 40ms per event in batch
+        startTime: baseTime + idx * 40,
         lat: latest.position.lat,
         lng: latest.position.lng,
         altitude: 0.02,
         driftAngle: Math.random() * Math.PI * 2,
-        driftSpeed: 30 + Math.random() * 50,
+        driftSpeed: 8 + Math.random() * 15,
         isNew: latest.type === 'new',
         isMajor: byteDiff >= 500,
         isBot: latest.bot,
         byteDiff,
         poeticMessage: getPoeticMessage(latest.type, byteDiff, latest.bot),
         event: latest,
+        langCode: LANGUAGE_SHORT_CODE[lang] || lang.toUpperCase(),
       };
     });
 
@@ -179,7 +203,6 @@ export default function FloatingTitles() {
       return [...unique, ...prev].slice(0, MAX_TITLES);
     });
 
-    // Fetch Japanese translations for new non-ja titles (throttled)
     for (const latest of newEvents) {
       const lang = extractLanguage(latest.wiki);
       if (lang !== 'ja' && !pendingTranslations.current.has(latest.id)) {
@@ -198,11 +221,107 @@ export default function FloatingTitles() {
 
   useEffect(() => {
     const cleanup = setInterval(() => {
+      if (burstActiveRef.current) return; // Don't clean up during burst
       const t = Date.now();
       setTitles((prev) => prev.filter((title) => t - title.startTime < ANIMATION_DURATION));
     }, 500);
     return () => clearInterval(cleanup);
   }, []);
+
+  // Focus burst: when globe is clicked, show nearby edits
+  // Only trigger on focusBurst changes (not timelineHistory) to avoid re-firing
+  useEffect(() => {
+    if (!focusBurst) {
+      burstActiveRef.current = false;
+      return;
+    }
+
+    const { lat: clickLat, lng: clickLng, screenX, screenY } = focusBurst;
+    const snapshot = useStore.getState().timelineHistory;
+
+    // Find the closest languages to the click point
+    const langDistances = Object.entries(LANGUAGE_COORDINATES)
+      .map(([lang, coords]) => ({
+        lang,
+        dist: haversineDistance(clickLat, clickLng, coords.lat, coords.lng),
+      }))
+      .sort((a, b) => a.dist - b.dist);
+
+    // Prioritize 3 closest languages
+    const primaryLangs = new Set(langDistances.slice(0, 3).map((l) => l.lang));
+    const primaryEntries: typeof snapshot = [];
+    const secondaryEntries: typeof snapshot = [];
+
+    for (const entry of snapshot) {
+      const lang = extractLanguage(entry.wiki);
+      if (primaryLangs.has(lang)) {
+        primaryEntries.push(entry);
+      } else {
+        secondaryEntries.push(entry);
+      }
+    }
+
+    const selected = [...primaryEntries.slice(0, 50)];
+    if (selected.length < 50) {
+      selected.push(...secondaryEntries.slice(0, 50 - selected.length));
+    }
+
+    if (selected.length > 0) {
+      burstActiveRef.current = true;
+      const baseTime = Date.now();
+      // Use SCREEN coordinates directly - bypass lat/lng→screen conversion
+      const burstTitles: FloatingTitle[] = selected.map((entry, idx) => {
+        const lang = extractLanguage(entry.wiki);
+        const color = getEditSizeColor(entry.byteDiff, entry.type, entry.bot);
+        const spread = 60; // pixels spread from click center
+
+        return {
+          id: `burst-${entry.id}-${idx}`,
+          title: entry.title,
+          jaTitle: null,
+          color,
+          startTime: baseTime + idx * 80,
+          lat: clickLat,
+          lng: clickLng,
+          altitude: 0.02,
+          driftAngle: Math.random() * Math.PI * 2,
+          driftSpeed: 5 + Math.random() * 10,
+          isNew: entry.type === 'new',
+          isMajor: entry.byteDiff >= 500,
+          isBot: entry.bot,
+          byteDiff: entry.byteDiff,
+          poeticMessage: null,
+          event: {
+            id: entry.id,
+            title: entry.title,
+            wiki: entry.wiki,
+            user: entry.user,
+            bot: entry.bot,
+            type: entry.type,
+            lengthOld: 0,
+            lengthNew: entry.byteDiff,
+            position: { lat: clickLat, lng: clickLng },
+            color,
+            size: 0.5,
+            createdAt: baseTime,
+          } as EditEventWithMeta,
+          langCode: LANGUAGE_SHORT_CODE[lang] || lang.toUpperCase(),
+          fixedScreenX: screenX + (Math.random() - 0.5) * spread,
+          fixedScreenY: screenY + (Math.random() - 0.5) * spread,
+        };
+      });
+
+      setTitles(burstTitles);
+    }
+
+    // Clear burst after 20 seconds
+    const timer = setTimeout(() => {
+      setFocusBurst(null);
+    }, 20000);
+
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusBurst, setFocusBurst]);
 
   const handleClick = useCallback((event: EditEventWithMeta) => {
     setSelectedEvent(event);
@@ -211,23 +330,37 @@ export default function FloatingTitles() {
   const visibleTitles = useMemo(() => {
     if (!globeCamera) return [];
     return titles.map((title) => {
+      const isBurst = title.fixedScreenX !== undefined;
+      const duration = isBurst ? BURST_ANIMATION_DURATION : ANIMATION_DURATION;
       const elapsed = now - title.startTime;
-      const progress = Math.min(elapsed / ANIMATION_DURATION, 1);
-      const screenPos = globeCamera.getScreenPosition(title.lat, title.lng, title.altitude);
-      if (!screenPos) return null;
+      const progress = Math.min(elapsed / duration, 1);
 
-      const driftDist = progress * title.driftSpeed * (ANIMATION_DURATION / 1000);
-      const x = screenPos.x + Math.cos(title.driftAngle) * driftDist;
-      const y = screenPos.y + Math.sin(title.driftAngle) * driftDist;
+      let x: number, y: number, visible: boolean;
+
+      if (isBurst) {
+        // Burst titles: use fixed screen coordinates from mouse click
+        const driftDist = progress * title.driftSpeed * (duration / 1000);
+        x = title.fixedScreenX! + Math.cos(title.driftAngle) * driftDist;
+        y = title.fixedScreenY! + Math.sin(title.driftAngle) * driftDist;
+        visible = true;
+      } else {
+        // Normal titles: project lat/lng through globe camera
+        const screenPos = globeCamera.getScreenPosition(title.lat, title.lng, title.altitude);
+        if (!screenPos) return null;
+        const driftDist = progress * title.driftSpeed * (duration / 1000);
+        x = screenPos.x + Math.cos(title.driftAngle) * driftDist;
+        y = screenPos.y + Math.sin(title.driftAngle) * driftDist;
+        visible = screenPos.visible;
+      }
 
       let opacity = 1;
       if (progress < 0.1) opacity = progress / 0.1;
-      else if (progress > 0.6) opacity = (1 - progress) / 0.4;
-      if (!screenPos.visible) opacity *= 0.3;
+      else if (progress > 0.7) opacity = (1 - progress) / 0.3;
+      if (!visible) opacity *= 0.3;
 
       let scale = title.isNew ? 1.3 : title.isMajor ? 1.15 : title.isBot ? 0.85 : 1;
 
-      return { ...title, x, y, opacity, scale, visible: screenPos.visible };
+      return { ...title, x, y, opacity, scale, visible };
     }).filter((t): t is NonNullable<typeof t> => t !== null && t.opacity > 0.05);
   }, [titles, now, globeCamera]);
 
@@ -272,6 +405,9 @@ export default function FloatingTitles() {
                 ({title.title.length > 20 ? title.title.slice(0, 20) + '...' : title.title})
               </span>
             )}
+            <span className="ml-1 text-[10px] opacity-40 font-mono" style={{ color: title.color }}>
+              ({title.langCode})
+            </span>
             {title.poeticMessage && (
               <div className="text-[10px] italic opacity-60 mt-0.5" style={{ color: title.color }}>
                 {title.poeticMessage}

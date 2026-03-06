@@ -75,6 +75,14 @@ export const LANGUAGE_COORDINATES: Record<string, GeoPosition> = {
   tr: { lat: 41.0082, lng: 28.9784 },
 };
 
+// Language Short Code (ISO 3166-1)
+export const LANGUAGE_SHORT_CODE: Record<string, string> = {
+  en: 'US', ja: 'JP', zh: 'CN', de: 'DE', fr: 'FR', es: 'ES',
+  pt: 'BR', ru: 'RU', it: 'IT', ko: 'KR', ar: 'SA', hi: 'IN',
+  nl: 'NL', pl: 'PL', sv: 'SE', vi: 'VN', uk: 'UA', cs: 'CZ',
+  id: 'ID', th: 'TH', fa: 'IR', he: 'IL', tr: 'TR',
+};
+
 // Edit Size Mapping
 export const EDIT_SIZE_MAP: Record<string, number> = {
   new: 1.0,

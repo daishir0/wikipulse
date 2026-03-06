@@ -1,5 +1,8 @@
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
+import { enableMapSet } from 'immer';
+
+enableMapSet();
 import {
   WikipediaEditEvent,
   EditEventWithMeta,
@@ -133,6 +136,10 @@ interface GlobalState {
   // Edit ripples
   editRipples: EditRipple[];
 
+  // Focus burst (globe click)
+  focusBurst: { lat: number; lng: number; screenX: number; screenY: number; timestamp: number } | null;
+  setFocusBurst: (burst: { lat: number; lng: number; screenX: number; screenY: number; timestamp: number } | null) => void;
+
   // WikiBot
   botEnabled: boolean;
   setBotEnabled: (value: boolean) => void;
@@ -184,8 +191,10 @@ export const useStore = create<GlobalState>()(
     timelineHistory: [],
     previewArticle: null,
     editRipples: [],
+    focusBurst: null,
 
     botEnabled: true,
+    setFocusBurst: (burst) => set((d) => { d.focusBurst = burst; }),
     setPreviewArticle: (article) => set((d) => { d.previewArticle = article; }),
     setBotEnabled: (value) => set((d) => { d.botEnabled = value; }),
     setGlobeCamera: (camera) => set((d) => { d.globeCamera = camera; }),

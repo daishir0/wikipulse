@@ -41,6 +41,7 @@ export default function Globe() {
   const editRipples = useStore((s) => s.editRipples);
   const setSelectedEvent = useStore((s) => s.setSelectedEvent);
   const setGlobeCamera = useStore((s) => s.setGlobeCamera);
+  const setFocusBurst = useStore((s) => s.setFocusBurst);
   const dayNightEnabled = useStore((s) => s.dayNightEnabled);
   const sunPosition = useDayNight();
   const defaultLightsRef = useRef<{ type: string; intensity: number; position?: THREE.Vector3 }[]>([]);
@@ -137,6 +138,10 @@ export default function Globe() {
     const event = eventMap.get(point.id);
     if (event) setSelectedEvent(event);
   }, [eventMap, setSelectedEvent]);
+
+  const handleGlobeClick = useCallback(({ lat, lng }: { lat: number; lng: number }, event: MouseEvent) => {
+    setFocusBurst({ lat, lng, screenX: event.clientX, screenY: event.clientY, timestamp: Date.now() });
+  }, [setFocusBurst]);
 
   const handleGlobeReady = useCallback(() => setIsReady(true), []);
 
@@ -243,6 +248,7 @@ export default function Globe() {
         bumpImageUrl="//unpkg.com/three-globe/example/img/earth-topology.png"
         backgroundImageUrl="/textures/starmap_nasa.jpg"
         onGlobeReady={handleGlobeReady}
+        onGlobeClick={handleGlobeClick}
         pointsData={pointsData}
         pointLat="lat"
         pointLng="lng"
