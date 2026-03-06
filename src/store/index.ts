@@ -348,9 +348,9 @@ export const useStore = create<GlobalState>()(
         .map((e) => ({ title: e.title, wiki: e.wiki, time: now }))
         .reverse();
 
-      // Pre-compute ripples for notable edits (new articles or large edits)
+      // Pre-compute ripples for all edits
       const newRipples: EditRipple[] = processedEvents
-        .filter((pe) => !pe.event.bot && (pe.event.type === 'new' || pe.byteDiff >= 500))
+        .filter((pe) => pe.eventWithMeta !== null)
         .map((pe) => ({
           id: `ripple-${pe.event.id || now}-${Math.random()}`,
           lat: pe.position.lat,
@@ -422,7 +422,7 @@ export const useStore = create<GlobalState>()(
           d.editEvents = [...newEditEvents, ...d.editEvents].slice(0, MAX_EVENTS);
         }
         if (newRipples.length > 0) {
-          d.editRipples = [...newRipples, ...d.editRipples].slice(0, 20);
+          d.editRipples = [...newRipples, ...d.editRipples].slice(0, 100);
         }
 
         // Stats (computed once for batch)

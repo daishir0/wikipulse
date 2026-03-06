@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { useStore, extractLanguage, getEditSizeCategory } from '@/store';
+import { useStore } from '@/store';
 import { useDayNight } from '@/hooks/useDayNight';
 import type { GlobeMethods } from 'react-globe.gl';
 import { GlobeCamera } from '@/lib/types';
@@ -11,17 +11,6 @@ import * as THREE from 'three';
 const GlobeGL = dynamic(() => import('react-globe.gl'), { ssr: false, loading: () => null });
 
 const GLOBE_RADIUS = 100;
-
-function getEditSizeColor(byteDiff: number, type: string, isBot: boolean): string {
-  if (isBot) return '#6B7280';
-  if (type === 'new') return '#FFD700';
-  if (byteDiff >= 1000) return '#EF4444';
-  if (byteDiff >= 500) return '#F97316';
-  if (byteDiff >= 100) return '#3B82F6';
-  if (byteDiff >= 0) return '#60A5FA';
-  if (byteDiff < -200) return '#A855F7';
-  return '#818CF8';
-}
 
 function latLngToVector3(lat: number, lng: number, altitude: number = 0): THREE.Vector3 {
   const phi = (90 - lat) * (Math.PI / 180);
@@ -34,19 +23,10 @@ function latLngToVector3(lat: number, lng: number, altitude: number = 0): THREE.
   );
 }
 
-function calculateOpacity(createdAt: number, now: number): number {
-  const age = now - createdAt;
-  if (age >= 5000) return 0;
-  return 1 - age / 5000;
-}
-
 export default function Globe() {
   const globeRef = useRef<GlobeMethods | undefined>(undefined);
   const containerRef = useRef<HTMLDivElement>(null);
-  const [now, setNow] = useState(Date.now());
   const [isReady, setIsReady] = useState(false);
-  const editEvents = useStore((s) => s.editEvents);
-  const filter = useStore((s) => s.filter);
   const autoRotate = useStore((s) => s.autoRotate);
   const editBattles = useStore((s) => s.editBattles);
   const editRipples = useStore((s) => s.editRipples);
@@ -56,43 +36,6 @@ export default function Globe() {
   const globeBrightness = useStore((s) => s.globeBrightness);
   const sunPosition = useDayNight();
   const defaultLightsRef = useRef<{ type: string; intensity: number; position?: THREE.Vector3 }[]>([]);
-
-  useEffect(() => {
-    const interval = setInterval(() => setNow(Date.now()), 500);
-    return () => clearInterval(interval);
-  }, []);
-
-  const pointsData = useMemo(() => {
-    return editEvents
-      .filter((event) => {
-        if (filter.languages.length > 0) {
-          const lang = extractLanguage(event.wiki);
-          if (!filter.languages.includes(lang)) return false;
-        }
-        return true;
-      })
-      .map((event) => {
-        const opacity = calculateOpacity(event.createdAt, now);
-        const cat = getEditSizeCategory(event);
-        const isNew = cat === 'new';
-        const isMajor = (event.lengthNew - event.lengthOld) >= 500;
-        const botMult = event.bot ? 0.6 : 1;
-        const finalOpacity = opacity * botMult;
-
-        const byteDiff = event.lengthNew - event.lengthOld;
-        const color = getEditSizeColor(byteDiff, event.type, event.bot);
-
-        return {
-          lat: event.position.lat,
-          lng: event.position.lng,
-          altitude: 0.01,
-          color,
-          radius: finalOpacity > 0 ? event.size * 0.8 * botMult * (isNew ? 1.3 : isMajor ? 1.15 : 1) : 0,
-          opacity: finalOpacity,
-        };
-      })
-      .filter((p) => p.opacity > 0);
-  }, [editEvents, now, filter.languages]);
 
   // Edit battle rings + edit ripples
   const ringsData = useMemo(() => {
@@ -241,17 +184,6 @@ export default function Globe() {
         backgroundImageUrl="/textures/starmap_nasa.jpg"
         onGlobeReady={handleGlobeReady}
         onGlobeClick={handleGlobeClick}
-        pointsData={pointsData}
-        pointLat="lat"
-        pointLng="lng"
-        pointAltitude="altitude"
-        pointColor={(d) => {
-          if (!d) return '#ffffff';
-          const p = d as { color: string };
-          return p.color ?? '#ffffff';
-        }}
-        pointRadius="radius"
-        pointsMerge={true}
         ringsData={ringsData}
         ringLat="lat"
         ringLng="lng"
@@ -259,7 +191,6 @@ export default function Globe() {
         ringPropagationSpeed="propagationSpeed"
         ringRepeatPeriod="repeatPeriod"
         ringColor="color"
-        pointsTransitionDuration={0}
         atmosphereColor="lightskyblue"
         atmosphereAltitude={0.15}
         animateIn={false}
