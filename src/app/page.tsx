@@ -13,7 +13,7 @@ import Tutorial from '@/components/Tutorial';
 import ArticlePreview from '@/components/ArticlePreview';
 import WikiBot from '@/components/WikiBot';
 import { useStore } from '@/store';
-import { Menu, HelpCircle, Maximize, Minimize, Sun, SunMoon, Play, Pause, Database, Eye, EyeOff } from 'lucide-react';
+import { Menu, HelpCircle, Maximize, Minimize, Sun, SunMoon, Play, Pause, Database, Eye, EyeOff, Settings, X } from 'lucide-react';
 
 const GlobeComponent = dynamic(() => import('@/components/Globe'), {
   ssr: false,
@@ -39,6 +39,7 @@ export default function Home() {
   const [webGLSupported, setWebGLSupported] = useState(true);
   const [mounted, setMounted] = useState(false);
   const [isPanelOpen, setIsPanelOpen] = useState(false);
+  const [isToolbarOpen, setIsToolbarOpen] = useState(false);
   const isFullscreen = useStore((s) => s.isFullscreen);
   const setIsFullscreen = useStore((s) => s.setIsFullscreen);
   const setShowTutorial = useStore((s) => s.setShowTutorial);
@@ -107,51 +108,71 @@ export default function Home() {
       </div>
 
       {/* Top-right: Controls */}
-      <div className="fixed top-4 right-4 z-20 flex items-center gap-2">
-        <SoundControls />
-        <button onClick={() => setAutoRotate(!autoRotate)}
-          className={`p-2 rounded-lg transition-colors ${
-            autoRotate ? 'bg-blue-600/50 hover:bg-blue-600/70' : 'bg-white/10 hover:bg-white/20'
-          }`}
-          title={autoRotate ? '自動回転: ON' : '自動回転: OFF'}>
-          {autoRotate ? <Pause className="w-5 h-5 text-blue-300" /> : <Play className="w-5 h-5 text-gray-400" />}
-        </button>
-        <button onClick={() => setDayNightEnabled(!dayNightEnabled)}
-          className={`p-2 rounded-lg transition-colors ${
-            dayNightEnabled ? 'bg-yellow-600/50 hover:bg-yellow-600/70' : 'bg-white/10 hover:bg-white/20'
-          }`}
-          title={dayNightEnabled ? '昼夜モード: ON' : '昼夜モード: OFF'}>
-          {dayNightEnabled ? <Sun className="w-5 h-5 text-yellow-300" /> : <SunMoon className="w-5 h-5 text-gray-400" />}
-        </button>
-        <button onClick={() => setBotCacheEnabled(!botCacheEnabled)}
-          className={`p-2 rounded-lg transition-colors ${
-            botCacheEnabled ? 'bg-purple-600/50 hover:bg-purple-600/70' : 'bg-white/10 hover:bg-white/20'
-          }`}
-          title={botCacheEnabled ? 'コメントキャッシュ: ON' : 'コメントキャッシュ: OFF'}>
-          <Database className={`w-5 h-5 ${botCacheEnabled ? 'text-purple-300' : 'text-gray-400'}`} />
-        </button>
-        <button onClick={() => setHideBackside(!hideBackside)}
-          className={`p-2 rounded-lg transition-colors ${
-            hideBackside ? 'bg-cyan-600/50 hover:bg-cyan-600/70' : 'bg-white/10 hover:bg-white/20'
-          }`}
-          title={hideBackside ? '裏側非表示: ON' : '裏側非表示: OFF'}>
-          {hideBackside ? <EyeOff className="w-5 h-5 text-cyan-300" /> : <Eye className="w-5 h-5 text-gray-400" />}
-        </button>
-        <button onClick={() => setShowTutorial(true)}
-          className="p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
-          title="使い方">
-          <HelpCircle className="w-5 h-5 text-gray-300" />
-        </button>
-        <button onClick={toggleFullscreen}
-          className="p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
-          title="全画面">
-          {isFullscreen ? <Minimize className="w-5 h-5 text-gray-300" /> : <Maximize className="w-5 h-5 text-gray-300" />}
-        </button>
-        <button onClick={() => setIsPanelOpen(true)}
-          className="p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
-          title="メニュー">
-          <Menu className="w-5 h-5 text-white" />
-        </button>
+      <div className="fixed top-4 right-4 z-20">
+        {/* Mobile: toggle + menu buttons */}
+        <div className="flex items-center gap-2 md:hidden justify-end">
+          <button onClick={() => setIsToolbarOpen(!isToolbarOpen)}
+            className="p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
+            title="設定">
+            {isToolbarOpen ? <X className="w-5 h-5 text-white" /> : <Settings className="w-5 h-5 text-gray-300" />}
+          </button>
+          <button onClick={() => setIsPanelOpen(true)}
+            className="p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
+            title="メニュー">
+            <Menu className="w-5 h-5 text-white" />
+          </button>
+        </div>
+
+        {/* Toolbar: always on desktop, toggled on mobile */}
+        <div className={`items-center gap-2 ${
+          isToolbarOpen ? 'flex flex-wrap mt-2 bg-black/80 backdrop-blur-sm rounded-xl p-3 border border-white/10' : 'hidden'
+        } md:flex md:mt-0 md:bg-transparent md:backdrop-blur-none md:p-0 md:border-0 md:rounded-none`}>
+          <SoundControls />
+          <button onClick={() => setAutoRotate(!autoRotate)}
+            className={`p-2 rounded-lg transition-colors ${
+              autoRotate ? 'bg-blue-600/50 hover:bg-blue-600/70' : 'bg-white/10 hover:bg-white/20'
+            }`}
+            title={autoRotate ? '自動回転: ON' : '自動回転: OFF'}>
+            {autoRotate ? <Pause className="w-5 h-5 text-blue-300" /> : <Play className="w-5 h-5 text-gray-400" />}
+          </button>
+          <button onClick={() => setDayNightEnabled(!dayNightEnabled)}
+            className={`p-2 rounded-lg transition-colors ${
+              dayNightEnabled ? 'bg-yellow-600/50 hover:bg-yellow-600/70' : 'bg-white/10 hover:bg-white/20'
+            }`}
+            title={dayNightEnabled ? '昼夜モード: ON' : '昼夜モード: OFF'}>
+            {dayNightEnabled ? <Sun className="w-5 h-5 text-yellow-300" /> : <SunMoon className="w-5 h-5 text-gray-400" />}
+          </button>
+          <button onClick={() => setBotCacheEnabled(!botCacheEnabled)}
+            className={`p-2 rounded-lg transition-colors ${
+              botCacheEnabled ? 'bg-purple-600/50 hover:bg-purple-600/70' : 'bg-white/10 hover:bg-white/20'
+            }`}
+            title={botCacheEnabled ? 'コメントキャッシュ: ON' : 'コメントキャッシュ: OFF'}>
+            <Database className={`w-5 h-5 ${botCacheEnabled ? 'text-purple-300' : 'text-gray-400'}`} />
+          </button>
+          <button onClick={() => setHideBackside(!hideBackside)}
+            className={`p-2 rounded-lg transition-colors ${
+              hideBackside ? 'bg-cyan-600/50 hover:bg-cyan-600/70' : 'bg-white/10 hover:bg-white/20'
+            }`}
+            title={hideBackside ? '裏側非表示: ON' : '裏側非表示: OFF'}>
+            {hideBackside ? <EyeOff className="w-5 h-5 text-cyan-300" /> : <Eye className="w-5 h-5 text-gray-400" />}
+          </button>
+          <button onClick={() => setShowTutorial(true)}
+            className="p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
+            title="使い方">
+            <HelpCircle className="w-5 h-5 text-gray-300" />
+          </button>
+          <button onClick={toggleFullscreen}
+            className="p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
+            title="全画面">
+            {isFullscreen ? <Minimize className="w-5 h-5 text-gray-300" /> : <Maximize className="w-5 h-5 text-gray-300" />}
+          </button>
+          {/* Menu: desktop only (mobile has its own above) */}
+          <button onClick={() => setIsPanelOpen(true)}
+            className="hidden md:block p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
+            title="メニュー">
+            <Menu className="w-5 h-5 text-white" />
+          </button>
+        </div>
       </div>
 
 

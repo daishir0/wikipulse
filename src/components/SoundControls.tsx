@@ -22,7 +22,7 @@ export default function SoundControls() {
   const isRand = sound.preset === 'rand';
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2 flex-wrap">
       <button
         onClick={toggleSound}
         className="p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
@@ -45,7 +45,7 @@ export default function SoundControls() {
             onChange={(e) => setVolume(parseFloat(e.target.value))}
             className="w-20 h-1 accent-blue-500"
           />
-          <div className="flex gap-0.5">
+          <div className="flex flex-wrap gap-0.5">
             {PRESET_OPTIONS.map((opt) => {
               const isSelected = sound.preset === opt.value;
               const isRandActive = isRand && opt.value === activeRandPreset;
