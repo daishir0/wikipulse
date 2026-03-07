@@ -346,6 +346,7 @@ export default function FloatingTitles() {
         if (hideBackside) return null;
         opacity *= 0.3;
       }
+      opacity = Math.max(opacity, 0.15);
 
       let scale = title.isNew ? 1.3 : title.isMajor ? 1.15 : title.isBot ? 0.85 : 1;
 
@@ -371,7 +372,7 @@ export default function FloatingTitles() {
               top: `${title.y}px`,
               opacity: title.opacity,
               transform: `translate(-50%, -50%) scale(${title.scale})`,
-              textShadow: `0 0 10px ${title.color}, 0 0 20px ${title.color}`,
+              textShadow: `0 0 3px black, 0 0 6px black, 0 0 10px ${title.color}, 0 0 20px ${title.color}`,
             }}
           >
             {title.isNew && (
