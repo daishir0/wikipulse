@@ -13,7 +13,7 @@ import Tutorial from '@/components/Tutorial';
 import ArticlePreview from '@/components/ArticlePreview';
 import WikiBot from '@/components/WikiBot';
 import { useStore } from '@/store';
-import { Menu, HelpCircle, Maximize, Minimize, Sun, SunMoon, RotateCw, Database, Eye, EyeOff } from 'lucide-react';
+import { Menu, HelpCircle, Maximize, Minimize, Sun, SunMoon, Play, Pause, Database, Eye, EyeOff } from 'lucide-react';
 
 const GlobeComponent = dynamic(() => import('@/components/Globe'), {
   ssr: false,
@@ -114,7 +114,7 @@ export default function Home() {
             autoRotate ? 'bg-blue-600/50 hover:bg-blue-600/70' : 'bg-white/10 hover:bg-white/20'
           }`}
           title={autoRotate ? '自動回転: ON' : '自動回転: OFF'}>
-          <RotateCw className={`w-5 h-5 ${autoRotate ? 'text-blue-300' : 'text-gray-400'}`} />
+          {autoRotate ? <Pause className="w-5 h-5 text-blue-300" /> : <Play className="w-5 h-5 text-gray-400" />}
         </button>
         <button onClick={() => setDayNightEnabled(!dayNightEnabled)}
           className={`p-2 rounded-lg transition-colors ${
