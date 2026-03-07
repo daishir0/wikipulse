@@ -79,6 +79,7 @@ function SearchLink({ keyword }: { keyword: string }) {
 
 export default function WikiBot() {
   const botEnabled = useStore((s) => s.botEnabled);
+  const setBotEnabled = useStore((s) => s.setBotEnabled);
   const wikiBotQueue = useStore((s) => s.wikiBotQueue);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [currentComment, setCurrentComment] = useState('');
@@ -296,27 +297,28 @@ export default function WikiBot() {
     }
   }, [isThinking, fetchComment]);
 
-  if (!botEnabled) return null;
-
-  const hasContent = history.length > 0 || currentComment || isThinking;
+  const hasContent = botEnabled && (history.length > 0 || currentComment || isThinking);
 
   return (
     <div className="fixed bottom-6 left-6 z-20 flex items-end gap-3">
       {/* Character */}
       <div
-        className={`relative flex-shrink-0 w-14 h-14 rounded-full bg-gradient-to-br from-blue-400 to-green-400 flex items-center justify-center shadow-lg shadow-blue-500/20 border-2 border-white/20 ${
-          isThinking ? 'animate-bounce' : ''
+        onClick={() => setBotEnabled(!botEnabled)}
+        className={`relative flex-shrink-0 w-14 h-14 rounded-full bg-gradient-to-br ${
+          botEnabled ? 'from-blue-400 to-green-400 shadow-blue-500/20' : 'from-gray-500 to-gray-600 shadow-gray-500/20'
+        } flex items-center justify-center shadow-lg border-2 border-white/20 cursor-pointer ${
+          botEnabled && isThinking ? 'animate-bounce' : ''
         }`}
         style={{ animationDuration: '1.5s' }}
       >
         <div className="relative w-full h-full flex items-center justify-center">
           <span className="text-2xl select-none">
-            {isThinking ? '🤔' : '🌍'}
+            {!botEnabled ? '😴' : isThinking ? '🤔' : '😊'}
           </span>
         </div>
         <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 whitespace-nowrap">
           <span className="text-[9px] text-white/60 bg-black/40 px-1.5 py-0.5 rounded-full">
-            ウィキまる
+            {botEnabled ? 'ウィキまる' : 'ウィキまる💤'}
           </span>
         </div>
       </div>

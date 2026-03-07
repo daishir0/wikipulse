@@ -13,7 +13,7 @@ import Tutorial from '@/components/Tutorial';
 import ArticlePreview from '@/components/ArticlePreview';
 import WikiBot from '@/components/WikiBot';
 import { useStore } from '@/store';
-import { Menu, HelpCircle, Maximize, Minimize, Sun, SunMoon, Bot, RotateCw, Database, Eye, EyeOff } from 'lucide-react';
+import { Menu, HelpCircle, Maximize, Minimize, Sun, SunMoon, RotateCw, Database, Eye, EyeOff } from 'lucide-react';
 
 const GlobeComponent = dynamic(() => import('@/components/Globe'), {
   ssr: false,
@@ -46,8 +46,6 @@ export default function Home() {
   const setAutoRotate = useStore((s) => s.setAutoRotate);
   const dayNightEnabled = useStore((s) => s.dayNightEnabled);
   const setDayNightEnabled = useStore((s) => s.setDayNightEnabled);
-  const botEnabled = useStore((s) => s.botEnabled);
-  const setBotEnabled = useStore((s) => s.setBotEnabled);
   const botCacheEnabled = useStore((s) => s.botCacheEnabled);
   const setBotCacheEnabled = useStore((s) => s.setBotCacheEnabled);
   const hideBackside = useStore((s) => s.hideBackside);
@@ -124,13 +122,6 @@ export default function Home() {
           }`}
           title={dayNightEnabled ? '昼夜モード: ON' : '昼夜モード: OFF'}>
           {dayNightEnabled ? <Sun className="w-5 h-5 text-yellow-300" /> : <SunMoon className="w-5 h-5 text-gray-400" />}
-        </button>
-        <button onClick={() => setBotEnabled(!botEnabled)}
-          className={`p-2 rounded-lg transition-colors ${
-            botEnabled ? 'bg-green-600/50 hover:bg-green-600/70' : 'bg-white/10 hover:bg-white/20'
-          }`}
-          title={botEnabled ? 'ウィキまる: ON' : 'ウィキまる: OFF'}>
-          <Bot className={`w-5 h-5 ${botEnabled ? 'text-green-300' : 'text-gray-400'}`} />
         </button>
         <button onClick={() => setBotCacheEnabled(!botCacheEnabled)}
           className={`p-2 rounded-lg transition-colors ${
