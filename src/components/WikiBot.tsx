@@ -93,6 +93,8 @@ export default function WikiBot() {
   const fetchingRef = useRef(false);
   const currentCommentRef = useRef('');
   const currentThumbnailRef = useRef<string | null>(null);
+  const usedCacheIdsRef = useRef<string[]>([]);
+  const cacheDelayRef = useRef<NodeJS.Timeout | null>(null);
 
   const fetchComment = useCallback(async (targetArticle?: { title: string; wiki: string }) => {
     if (fetchingRef.current) {
@@ -147,38 +149,58 @@ export default function WikiBot() {
     setIsThinking(true);
 
     try {
+      const shouldUseCache = !targetArticle && useStore.getState().botCacheEnabled;
       const res = await fetch('/api/bot-comment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ edits: editsPayload, requestedArticle: targetArticle?.title || null }),
+        body: JSON.stringify({
+          edits: editsPayload,
+          requestedArticle: targetArticle?.title || null,
+          useCache: shouldUseCache,
+          excludeCacheIds: usedCacheIdsRef.current,
+        }),
       });
       const data = await res.json();
 
-      console.log(`[WikiBot] API response: comment=${data.comment ? data.comment.slice(0, 50) + '...' : '(empty)'}, status=${res.status}`);
+      console.log(`[WikiBot] API response: comment=${data.comment ? data.comment.slice(0, 50) + '...' : '(empty)'}, cacheId=${data.cacheId || 'none'}, status=${res.status}`);
+
+      // Track used cache IDs (max 10)
+      if (data.cacheId) {
+        usedCacheIdsRef.current = [...usedCacheIdsRef.current, data.cacheId].slice(-10);
+      }
 
       if (data.comment) {
-        currentCommentRef.current = data.comment;
-        setCurrentComment(data.comment);
-        setCommentVersion((v) => v + 1);
-        setIsThinking(false);
-        setThumbnailUrl(null);
-        currentThumbnailRef.current = null;
+        const showComment = () => {
+          currentCommentRef.current = data.comment;
+          setCurrentComment(data.comment);
+          setCommentVersion((v) => v + 1);
+          setIsThinking(false);
+          setThumbnailUrl(null);
+          currentThumbnailRef.current = null;
 
-        // Fetch thumbnail for the article mentioned in the comment
-        const articleTitle = extractFirstTitle(data.comment);
-        if (articleTitle) {
-          const timeline = useStore.getState().timelineHistory;
-          const matchingEdit = timeline.find((e) => e.title === articleTitle);
-          const lang = matchingEdit ? extractLanguage(matchingEdit.wiki) : 'en';
-          fetch(`https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(articleTitle)}`)
-            .then((r) => r.json())
-            .then((summary) => {
-              if (summary.thumbnail?.source) {
-                setThumbnailUrl(summary.thumbnail.source);
-                currentThumbnailRef.current = summary.thumbnail.source;
-              }
-            })
-            .catch(() => { /* ignore thumbnail fetch errors */ });
+          // Fetch thumbnail for the article mentioned in the comment
+          const articleTitle = extractFirstTitle(data.comment);
+          if (articleTitle) {
+            const timeline = useStore.getState().timelineHistory;
+            const matchingEdit = timeline.find((e) => e.title === articleTitle);
+            const lang = matchingEdit ? extractLanguage(matchingEdit.wiki) : 'en';
+            fetch(`https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(articleTitle)}`)
+              .then((r) => r.json())
+              .then((summary) => {
+                if (summary.thumbnail?.source) {
+                  setThumbnailUrl(summary.thumbnail.source);
+                  currentThumbnailRef.current = summary.thumbnail.source;
+                }
+              })
+              .catch(() => { /* ignore thumbnail fetch errors */ });
+          }
+        };
+
+        // If cached, delay to simulate thinking (15 seconds)
+        if (data.cacheId) {
+          cacheDelayRef.current = setTimeout(showComment, 15000);
+        } else {
+          showComment();
         }
       } else {
         console.log('[WikiBot] API returned empty comment');
@@ -256,6 +278,7 @@ export default function WikiBot() {
     return () => {
       clearTimeout(initialTimer);
       if (intervalRef.current) clearInterval(intervalRef.current);
+      if (cacheDelayRef.current) clearTimeout(cacheDelayRef.current);
     };
   }, [botEnabled, fetchComment]);
 

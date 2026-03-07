@@ -26,7 +26,7 @@ export default function SoundControls() {
       <button
         onClick={toggleSound}
         className="p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
-        title={sound.enabled ? 'Mute' : 'Unmute'}
+        title={sound.enabled ? 'ミュート' : 'ミュート解除'}
       >
         {sound.enabled ? (
           <Volume2 className="w-5 h-5 text-white" />

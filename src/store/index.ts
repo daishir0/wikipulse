@@ -148,6 +148,8 @@ interface GlobalState {
   // WikiBot
   botEnabled: boolean;
   setBotEnabled: (value: boolean) => void;
+  botCacheEnabled: boolean;
+  setBotCacheEnabled: (value: boolean) => void;
 
   // WikiBot article request queue (from ArticlePreview "ウィキまるに送る")
   wikiBotQueue: { title: string; wiki: string }[];
@@ -204,6 +206,7 @@ export const useStore = create<GlobalState>()(
     focusBurst: null,
     globeBrightness: 2.0,
     botEnabled: true,
+    botCacheEnabled: true,
     setGlobeBrightness: (value) => set((d) => { d.globeBrightness = value; }),
     wikiBotQueue: [],
     pushWikiBotQueue: (req) => set((d) => { d.wikiBotQueue.push(req); }),
@@ -217,6 +220,7 @@ export const useStore = create<GlobalState>()(
     setFocusBurst: (burst) => set((d) => { d.focusBurst = burst; }),
     setPreviewArticle: (article) => set((d) => { d.previewArticle = article; }),
     setBotEnabled: (value) => set((d) => { d.botEnabled = value; }),
+    setBotCacheEnabled: (value) => set((d) => { d.botCacheEnabled = value; }),
     setGlobeCamera: (camera) => set((d) => { d.globeCamera = camera; }),
     setSelectedEvent: (event) => set((d) => { d.selectedEvent = event; }),
     setArticlePreview: (preview) => set((d) => { d.articlePreview = preview; }),

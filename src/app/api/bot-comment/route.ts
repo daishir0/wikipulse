@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { spawn } from 'child_process';
-import { writeFileSync, unlinkSync } from 'fs';
+import { writeFileSync, unlinkSync, readdirSync, readFileSync, mkdirSync } from 'fs';
+import path from 'path';
 
 const CLAUDE_PATH = '/home/ec2-user/.npm-global/bin/claude';
 const TIMEOUT_MS = 60000; // 60s timeout
+const CACHE_DIR = path.join(process.cwd(), 'data', 'bot-cache');
+const CACHE_MIN_COUNT = 50;
 
 const ANGLES = [
   '意味・定義（その語が何を表すか、どういう概念か）',
@@ -109,12 +112,70 @@ async function fetchArticleContext(title: string, lang: string): Promise<Article
   return result;
 }
 
+function getCacheFiles(): string[] {
+  try {
+    return readdirSync(CACHE_DIR).filter((f) => f.endsWith('.json'));
+  } catch {
+    return [];
+  }
+}
+
+function getRandomCachedComment(excludeIds: string[]): { comment: string; cacheId: string } | null {
+  const files = getCacheFiles();
+  const candidates = files.filter((f) => !excludeIds.includes(f));
+  if (candidates.length === 0 && files.length > 0) {
+    // All excluded, pick from full list
+    const pick = files[Math.floor(Math.random() * files.length)];
+    try {
+      const data = JSON.parse(readFileSync(path.join(CACHE_DIR, pick), 'utf8'));
+      return { comment: data.comment, cacheId: pick };
+    } catch { return null; }
+  }
+  if (candidates.length === 0) return null;
+  const pick = candidates[Math.floor(Math.random() * candidates.length)];
+  try {
+    const data = JSON.parse(readFileSync(path.join(CACHE_DIR, pick), 'utf8'));
+    return { comment: data.comment, cacheId: pick };
+  } catch { return null; }
+}
+
+function saveToCacheDir(comment: string, articleTitle?: string, lang?: string, angle?: string) {
+  try {
+    mkdirSync(CACHE_DIR, { recursive: true });
+    const fileName = `comment-${Date.now()}.json`;
+    const filePath = path.join(CACHE_DIR, fileName);
+    writeFileSync(filePath, JSON.stringify({ comment, articleTitle: articleTitle || '', lang: lang || '', angle: angle || '' }), 'utf8');
+    console.log(`[bot-comment] Saved to cache: ${fileName}`);
+  } catch (err) {
+    console.error(`[bot-comment] Failed to save cache:`, err);
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
-    const { edits, requestedArticle } = (await req.json()) as { edits: EditSummary[]; requestedArticle?: string | null };
+    const { edits, requestedArticle, useCache, excludeCacheIds } = (await req.json()) as {
+      edits: EditSummary[];
+      requestedArticle?: string | null;
+      useCache?: boolean;
+      excludeCacheIds?: string[];
+    };
 
     if (!edits || edits.length === 0) {
       return NextResponse.json({ comment: '' });
+    }
+
+    // Serve from cache if conditions met
+    if (useCache && !requestedArticle) {
+      const cacheFiles = getCacheFiles();
+      if (cacheFiles.length >= CACHE_MIN_COUNT) {
+        const cached = getRandomCachedComment(excludeCacheIds || []);
+        if (cached) {
+          console.log(`[bot-comment] Serving cached comment: ${cached.cacheId}`);
+          return NextResponse.json({ comment: cached.comment, cacheId: cached.cacheId });
+        }
+      } else {
+        console.log(`[bot-comment] Cache has ${cacheFiles.length}/${CACHE_MIN_COUNT} files, using Claude CLI and saving to cache`);
+      }
     }
 
     // Build a concise edit summary for the prompt (with byteDiff and region)
@@ -215,6 +276,12 @@ ${contextLines}
 
     const comment = await runClaude(prompt);
     console.log(`[bot-comment] Claude returned (${comment.length} chars): ${comment ? comment.slice(0, 80) + '...' : '(empty)'}`);
+
+    // Save to cache for periodic (non-requested) comments
+    if (comment && !requestedArticle) {
+      saveToCacheDir(comment, humanEdits[0]?.title, humanEdits[0]?.lang, angle);
+    }
+
     return NextResponse.json({ comment });
   } catch (error) {
     console.error('Bot comment error:', error);
@@ -239,7 +306,7 @@ function runClaude(prompt: string): Promise<string> {
     }
 
     // Use bash to cat the file into claude's stdin
-    const proc = spawn('bash', ['-c', `cat "${tmpFile}" | ${CLAUDE_PATH} --print --dangerously-skip-permissions`], {
+    const proc = spawn('bash', ['-c', `cat "${tmpFile}" | ${CLAUDE_PATH} --print --dangerously-skip-permissions --disable-slash-commands --tools "" --strict-mcp-config`], {
       cwd: '/tmp',
       env: { ...restEnv, HOME: '/home/ec2-user' },
     });
