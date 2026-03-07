@@ -144,6 +144,7 @@ export default function FloatingTitles() {
   const setSelectedEvent = useStore((s) => s.setSelectedEvent);
   const globeCamera = useStore((s) => s.globeCamera);
   const focusBurst = useStore((s) => s.focusBurst);
+  const hideBackside = useStore((s) => s.hideBackside);
   const setFocusBurst = useStore((s) => s.setFocusBurst);
   const timelineHistory = useStore((s) => s.timelineHistory);
   const pendingTranslations = useRef(new Set<string>());
@@ -341,13 +342,16 @@ export default function FloatingTitles() {
       let opacity = 1;
       if (progress < 0.1) opacity = progress / 0.1;
       else if (progress > 0.7) opacity = (1 - progress) / 0.3;
-      if (!visible) opacity *= 0.3;
+      if (!visible) {
+        if (hideBackside) return null;
+        opacity *= 0.3;
+      }
 
       let scale = title.isNew ? 1.3 : title.isMajor ? 1.15 : title.isBot ? 0.85 : 1;
 
       return { ...title, x, y, opacity, scale, visible };
     }).filter((t): t is NonNullable<typeof t> => t !== null && t.opacity > 0.05);
-  }, [titles, now, globeCamera]);
+  }, [titles, now, globeCamera, hideBackside]);
 
   if (!globeCamera) return null;
 

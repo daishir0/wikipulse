@@ -13,7 +13,7 @@ import Tutorial from '@/components/Tutorial';
 import ArticlePreview from '@/components/ArticlePreview';
 import WikiBot from '@/components/WikiBot';
 import { useStore } from '@/store';
-import { Menu, HelpCircle, Maximize, Minimize, Sun, SunMoon, Bot, RotateCw, Database } from 'lucide-react';
+import { Menu, HelpCircle, Maximize, Minimize, Sun, SunMoon, Bot, RotateCw, Database, Eye, EyeOff } from 'lucide-react';
 
 const GlobeComponent = dynamic(() => import('@/components/Globe'), {
   ssr: false,
@@ -50,6 +50,8 @@ export default function Home() {
   const setBotEnabled = useStore((s) => s.setBotEnabled);
   const botCacheEnabled = useStore((s) => s.botCacheEnabled);
   const setBotCacheEnabled = useStore((s) => s.setBotCacheEnabled);
+  const hideBackside = useStore((s) => s.hideBackside);
+  const setHideBackside = useStore((s) => s.setHideBackside);
 
   useWikipediaStream();
   useSound();
@@ -136,6 +138,13 @@ export default function Home() {
           }`}
           title={botCacheEnabled ? 'コメントキャッシュ: ON' : 'コメントキャッシュ: OFF'}>
           <Database className={`w-5 h-5 ${botCacheEnabled ? 'text-purple-300' : 'text-gray-400'}`} />
+        </button>
+        <button onClick={() => setHideBackside(!hideBackside)}
+          className={`p-2 rounded-lg transition-colors ${
+            hideBackside ? 'bg-cyan-600/50 hover:bg-cyan-600/70' : 'bg-white/10 hover:bg-white/20'
+          }`}
+          title={hideBackside ? '裏側非表示: ON' : '裏側非表示: OFF'}>
+          {hideBackside ? <EyeOff className="w-5 h-5 text-cyan-300" /> : <Eye className="w-5 h-5 text-gray-400" />}
         </button>
         <button onClick={() => setShowTutorial(true)}
           className="p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors"

@@ -14,12 +14,13 @@ const GLOBE_RADIUS = 100;
 
 function latLngToVector3(lat: number, lng: number, altitude: number = 0): THREE.Vector3 {
   const phi = (90 - lat) * (Math.PI / 180);
-  const theta = (lng + 180) * (Math.PI / 180);
+  const theta = (90 - lng) * (Math.PI / 180);
   const radius = GLOBE_RADIUS * (1 + altitude);
+  const phiSin = Math.sin(phi);
   return new THREE.Vector3(
-    -radius * Math.sin(phi) * Math.cos(theta),
+    radius * phiSin * Math.cos(theta),
     radius * Math.cos(phi),
-    radius * Math.sin(phi) * Math.sin(theta)
+    radius * phiSin * Math.sin(theta)
   );
 }
 
