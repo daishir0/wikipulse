@@ -80,6 +80,8 @@ function SearchLink({ keyword }: { keyword: string }) {
 export default function WikiBot() {
   const botEnabled = useStore((s) => s.botEnabled);
   const setBotEnabled = useStore((s) => s.setBotEnabled);
+  const botCacheEnabled = useStore((s) => s.botCacheEnabled);
+  const setBotCacheEnabled = useStore((s) => s.setBotCacheEnabled);
   const wikiBotQueue = useStore((s) => s.wikiBotQueue);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [currentComment, setCurrentComment] = useState('');
@@ -303,9 +305,25 @@ export default function WikiBot() {
     <div className="fixed bottom-6 left-6 z-20 flex items-end gap-3">
       {/* Character */}
       <div
-        onClick={() => setBotEnabled(!botEnabled)}
+        onClick={() => {
+          if (botEnabled && botCacheEnabled) {
+            // キャッシュモード → ライブモード
+            setBotCacheEnabled(false);
+          } else if (botEnabled && !botCacheEnabled) {
+            // ライブモード → スリープ
+            setBotEnabled(false);
+          } else {
+            // スリープ → キャッシュモード
+            setBotCacheEnabled(true);
+            setBotEnabled(true);
+          }
+        }}
         className={`relative flex-shrink-0 w-14 h-14 rounded-full bg-gradient-to-br ${
-          botEnabled ? 'from-blue-400 to-green-400 shadow-blue-500/20' : 'from-gray-500 to-gray-600 shadow-gray-500/20'
+          !botEnabled
+            ? 'from-gray-500 to-gray-600 shadow-gray-500/20'
+            : botCacheEnabled
+              ? 'from-blue-400 to-green-400 shadow-blue-500/20'
+              : 'from-orange-400 to-red-400 shadow-orange-500/20'
         } flex items-center justify-center shadow-lg border-2 border-white/20 cursor-pointer ${
           botEnabled && isThinking ? 'animate-bounce' : ''
         }`}
@@ -313,12 +331,12 @@ export default function WikiBot() {
       >
         <div className="relative w-full h-full flex items-center justify-center">
           <span className="text-2xl select-none">
-            {!botEnabled ? '😴' : isThinking ? '🤔' : '😊'}
+            {!botEnabled ? '😴' : isThinking ? '🤔' : botCacheEnabled ? '😊' : '🔥'}
           </span>
         </div>
         <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 whitespace-nowrap">
           <span className="text-[9px] text-white/60 bg-black/40 px-1.5 py-0.5 rounded-full">
-            {botEnabled ? 'ウィキまる' : 'ウィキまる💤'}
+            {!botEnabled ? 'ウィキまる💤' : botCacheEnabled ? 'ウィキまる' : 'ウィキまる🔴'}
           </span>
         </div>
       </div>
