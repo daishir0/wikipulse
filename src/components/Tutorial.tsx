@@ -119,7 +119,7 @@ function StepWikiBot() {
         </li>
       </ul>
       <p className="text-xs text-gray-400">
-        右上のロボットアイコンからON/OFFを切り替えられます。
+        右上のロボットアイコンからON/OFFを切り替えられます。長押しで一時的に隠すこともできます（右上のボタンでも切り替え可能）。
       </p>
     </div>
   );

@@ -7,6 +7,7 @@ import { extractLanguage } from '@/utils/geo';
 const BOT_INTERVAL = 120000; // 2 minutes
 const TYPING_SPEED = 35; // ms per character
 const MAX_HISTORY = 3; // Keep 3 past comments visible
+const LONG_PRESS_MS = 600;
 
 interface HistoryEntry {
   text: string;
@@ -77,11 +78,15 @@ function SearchLink({ keyword }: { keyword: string }) {
   );
 }
 
+const GREETINGS = ['呼んだ？', 'ただいま！', 'またきたよ！'];
+
 export default function WikiBot() {
   const botEnabled = useStore((s) => s.botEnabled);
   const setBotEnabled = useStore((s) => s.setBotEnabled);
   const botCacheEnabled = useStore((s) => s.botCacheEnabled);
   const setBotCacheEnabled = useStore((s) => s.setBotCacheEnabled);
+  const botVisible = useStore((s) => s.botVisible);
+  const setBotVisible = useStore((s) => s.setBotVisible);
   const wikiBotQueue = useStore((s) => s.wikiBotQueue);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [currentComment, setCurrentComment] = useState('');
@@ -98,6 +103,15 @@ export default function WikiBot() {
   const currentThumbnailRef = useRef<string | null>(null);
   const usedCacheIdsRef = useRef<string[]>([]);
   const cacheDelayRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Long-press state
+  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const longPressTriggeredRef = useRef(false);
+
+  // Exit/Enter animation state
+  const [exitPhase, setExitPhase] = useState<'idle' | 'wave' | 'shrink'>('idle');
+  const [enterPhase, setEnterPhase] = useState<'idle' | 'grow' | 'greet'>('idle');
+  const [greeting, setGreeting] = useState('');
 
   const fetchComment = useCallback(async (targetArticle?: { title: string; wiki: string }) => {
     if (fetchingRef.current) {
@@ -299,25 +313,102 @@ export default function WikiBot() {
     }
   }, [isThinking, fetchComment]);
 
+  // Long-press handlers
+  const handlePointerDown = useCallback(() => {
+    longPressTriggeredRef.current = false;
+    longPressTimerRef.current = setTimeout(() => {
+      longPressTriggeredRef.current = true;
+      // Trigger exit animation
+      setExitPhase('wave');
+      setTimeout(() => {
+        setExitPhase('shrink');
+        setTimeout(() => {
+          setBotVisible(false);
+          setExitPhase('idle');
+        }, 300);
+      }, 800);
+    }, LONG_PRESS_MS);
+  }, [setBotVisible]);
+
+  const handlePointerUp = useCallback(() => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  }, []);
+
+  const handleClick = useCallback(() => {
+    if (longPressTriggeredRef.current) {
+      longPressTriggeredRef.current = false;
+      return; // Suppress click after long press
+    }
+    // Original state cycling logic
+    if (botEnabled && botCacheEnabled) {
+      setBotCacheEnabled(false);
+    } else if (botEnabled && !botCacheEnabled) {
+      setBotEnabled(false);
+    } else {
+      setBotCacheEnabled(true);
+      setBotEnabled(true);
+    }
+  }, [botEnabled, botCacheEnabled, setBotEnabled, setBotCacheEnabled]);
+
+  // Recall icon click — show enter animation
+  const handleRecall = useCallback(() => {
+    setBotVisible(true);
+    setEnterPhase('grow');
+    setTimeout(() => {
+      setEnterPhase('greet');
+      setGreeting(GREETINGS[Math.floor(Math.random() * GREETINGS.length)]);
+      setTimeout(() => {
+        setEnterPhase('idle');
+        setGreeting('');
+      }, 1500);
+    }, 300);
+  }, [setBotVisible]);
+
+  // Clean up long press timer on unmount
+  useEffect(() => {
+    return () => {
+      if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+    };
+  }, []);
+
   const hasContent = botEnabled && (history.length > 0 || currentComment || isThinking);
+
+  // Recall icon when hidden
+  if (!botVisible) {
+    return (
+      <div className="fixed bottom-6 left-6 z-20">
+        <button
+          onClick={handleRecall}
+          className="group w-8 h-8 md:w-7 md:h-7 rounded-full bg-gray-700/50 hover:bg-gray-600/70 flex items-center justify-center cursor-pointer transition-all duration-200 hover:scale-125 animate-pulse border border-white/10"
+          style={{ animationDuration: '3s' }}
+          title="ウィキまるを呼ぶ"
+        >
+          <span className="text-sm md:text-xs select-none">😴</span>
+        </button>
+      </div>
+    );
+  }
+
+  // Determine emoji based on exit animation or current state
+  const getEmoji = () => {
+    if (exitPhase === 'wave') return '👋';
+    if (!botEnabled) return '😴';
+    if (isThinking) return '🤔';
+    if (botCacheEnabled) return '😊';
+    return '🔥';
+  };
 
   return (
     <div className="fixed bottom-6 left-6 z-20 flex items-end gap-3">
       {/* Character */}
       <div
-        onClick={() => {
-          if (botEnabled && botCacheEnabled) {
-            // キャッシュモード → ライブモード
-            setBotCacheEnabled(false);
-          } else if (botEnabled && !botCacheEnabled) {
-            // ライブモード → スリープ
-            setBotEnabled(false);
-          } else {
-            // スリープ → キャッシュモード
-            setBotCacheEnabled(true);
-            setBotEnabled(true);
-          }
-        }}
+        onPointerDown={handlePointerDown}
+        onPointerUp={handlePointerUp}
+        onPointerLeave={handlePointerUp}
+        onClick={handleClick}
         className={`relative flex-shrink-0 w-14 h-14 rounded-full bg-gradient-to-br ${
           !botEnabled
             ? 'from-gray-500 to-gray-600 shadow-gray-500/20'
@@ -326,12 +417,16 @@ export default function WikiBot() {
               : 'from-orange-400 to-red-400 shadow-orange-500/20'
         } flex items-center justify-center shadow-lg border-2 border-white/20 cursor-pointer ${
           botEnabled && isThinking ? 'animate-bounce' : ''
+        } transition-all duration-300 ${
+          exitPhase === 'shrink' ? 'scale-0 opacity-0 -translate-x-4' : ''
+        } ${
+          enterPhase === 'grow' ? 'animate-bounce' : ''
         }`}
         style={{ animationDuration: '1.5s' }}
       >
         <div className="relative w-full h-full flex items-center justify-center">
           <span className="text-2xl select-none">
-            {!botEnabled ? '😴' : isThinking ? '🤔' : botCacheEnabled ? '😊' : '🔥'}
+            {getEmoji()}
           </span>
         </div>
         <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 whitespace-nowrap">
@@ -341,8 +436,22 @@ export default function WikiBot() {
         </div>
       </div>
 
+      {/* Exit wave bubble */}
+      {exitPhase === 'wave' && (
+        <div className="bg-gray-800/90 backdrop-blur-sm rounded-xl px-3 py-2 border border-gray-600/50 shadow-xl animate-fade-in">
+          <p className="text-white text-sm">またね！👋</p>
+        </div>
+      )}
+
+      {/* Enter greeting bubble */}
+      {enterPhase === 'greet' && greeting && (
+        <div className="bg-gray-800/90 backdrop-blur-sm rounded-xl px-3 py-2 border border-gray-600/50 shadow-xl animate-fade-in">
+          <p className="text-white text-sm">{greeting}</p>
+        </div>
+      )}
+
       {/* Speech bubbles stack */}
-      {hasContent && (
+      {hasContent && exitPhase === 'idle' && enterPhase === 'idle' && (
         <div className="flex flex-col gap-2 max-w-sm">
           <div className="relative">
             {/* Past comments (older = more faded) */}

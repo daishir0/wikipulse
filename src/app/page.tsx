@@ -13,7 +13,7 @@ import Tutorial from '@/components/Tutorial';
 import ArticlePreview from '@/components/ArticlePreview';
 import WikiBot from '@/components/WikiBot';
 import { useStore } from '@/store';
-import { Menu, HelpCircle, Maximize, Minimize, Sun, SunMoon, Play, Pause, Eye, EyeOff, Settings, X } from 'lucide-react';
+import { Menu, HelpCircle, Maximize, Minimize, Sun, SunMoon, Play, Pause, Eye, EyeOff, Settings, X, Bot, BotOff } from 'lucide-react';
 
 const GlobeComponent = dynamic(() => import('@/components/Globe'), {
   ssr: false,
@@ -49,6 +49,8 @@ export default function Home() {
   const setDayNightEnabled = useStore((s) => s.setDayNightEnabled);
   const hideBackside = useStore((s) => s.hideBackside);
   const setHideBackside = useStore((s) => s.setHideBackside);
+  const botVisible = useStore((s) => s.botVisible);
+  const setBotVisible = useStore((s) => s.setBotVisible);
 
   useWikipediaStream();
   useSound();
@@ -146,6 +148,13 @@ export default function Home() {
             }`}
             title={hideBackside ? '裏側非表示: ON' : '裏側非表示: OFF'}>
             {hideBackside ? <EyeOff className="w-5 h-5 text-cyan-300" /> : <Eye className="w-5 h-5 text-gray-400" />}
+          </button>
+          <button onClick={() => setBotVisible(!botVisible)}
+            className={`p-2 rounded-lg transition-colors ${
+              botVisible ? 'bg-green-600/50 hover:bg-green-600/70' : 'bg-white/10 hover:bg-white/20'
+            }`}
+            title={botVisible ? 'ウィキまる: 表示中' : 'ウィキまる: 非表示'}>
+            {botVisible ? <Bot className="w-5 h-5 text-green-300" /> : <BotOff className="w-5 h-5 text-gray-400" />}
           </button>
           <button onClick={() => setShowTutorial(true)}
             className="p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
