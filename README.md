@@ -1,5 +1,7 @@
 # WikiPulse
 
+![WikiPulse - Real-time Wikipedia Edit Visualization](screenshot.png)
+
 A real-time Wikipedia edit visualization on an interactive 3D globe. Watch edits from around the world appear as colored markers, listen to piano tones for each language, and explore trends and edit battles as they happen.
 
 > **[Japanese version below](#japanese-version)**
